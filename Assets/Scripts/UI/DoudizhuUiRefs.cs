@@ -34,6 +34,16 @@ namespace Doudizhu.UI
 
         private void Awake()
         {
+            EnsureRankMap();
+        }
+
+        private void EnsureRankMap()
+        {
+            if (_rankMap.Count == RankSprites.Count && _rankMap.Count > 0)
+            {
+                return;
+            }
+
             _rankMap.Clear();
             foreach (RankSpriteEntry entry in RankSprites)
             {
@@ -46,6 +56,7 @@ namespace Doudizhu.UI
 
         public Sprite GetRankSprite(CardRank rank)
         {
+            EnsureRankMap();
             string key = rank switch
             {
                 CardRank.Ace => "A",

@@ -1,6 +1,6 @@
 ﻿# One Click Execution Report
 
-时间：2026-01-23 22:15:11
+时间：2026-01-23 22:25:34
 工程路径：E:\workProject\unityProject\doudizhu
 镜像路径：E:\workProject\unityProject\doudizhu_mirror
 执行脚本：ci/one_click_check.bat
@@ -16,11 +16,11 @@
 - 当前分支：master
 - 本轮提交数：UNKNOWN
 - 提交记录：
+  - 5457c27 运行时动态生成UI并清空场景
   - 9fbd951 修复10与大小王牌面显示
   - e35f4d3 显示各家出牌并支持选牌上移
   - 58138e1 桌面展示最新出牌
   - 0de0a0e 清理场景静态手牌避免运行叠加
-  - 9259a7a 阻止UI场景自动运行模拟逻辑
 - 是否已同步镜像：YES
 
 ## 测试执行情况
@@ -51,7 +51,7 @@
 
 ### 截图观察点
 （至少列出一个具体观察点，用于满足 AGENTS.md 要求）
-- ui_shot_1.png 观察点：桌面未出牌时保持空白，底部按钮与顶部分牌布局稳定。
+- ui_shot_1.png 观察点：运行时生成界面与之前一致，桌面中央提示与顶部分牌正常，底部操作按钮对齐稳定。
 
 ## 异常记录
 - 出现异常：截图未生成或日志缺失
