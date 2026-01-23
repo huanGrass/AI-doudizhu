@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using Doudizhu.UI;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -104,6 +105,8 @@ namespace Doudizhu.EditorTools
             CreatePlayerPanels(uiRoot.transform, playerPanelPrefab, font, smallKing, bigKing, joker);
             CreateHandArea(uiRoot.transform, font, cardFacePrefab, rankSprites, suitSpade, suitHeart, suitClub, suitDiamond, joker, smallKing, bigKing);
             CreateActionBar(uiRoot.transform, actionButtonPrefab, font);
+            AttachUiRefs(uiRoot, cardFacePrefab, cardBackPrefab, actionButtonPrefab, background, cardBack, joker, smallKing, bigKing, suitSpade, suitHeart, suitClub, suitDiamond, rankSprites);
+            uiRoot.AddComponent<DoudizhuUiController>();
             EnsureBatchScreenshotProvider();
             EnsureEventSystem();
 
@@ -375,6 +378,43 @@ namespace Doudizhu.EditorTools
                 text.font = font;
                 Image image = button.GetComponent<Image>();
                 image.color = colors[i];
+            }
+        }
+
+        private static void AttachUiRefs(
+            GameObject root,
+            GameObject cardFacePrefab,
+            GameObject cardBackPrefab,
+            GameObject actionButtonPrefab,
+            Sprite background,
+            Sprite cardBack,
+            Sprite joker,
+            Sprite smallKing,
+            Sprite bigKing,
+            Sprite suitSpade,
+            Sprite suitHeart,
+            Sprite suitClub,
+            Sprite suitDiamond,
+            Dictionary<string, Sprite> rankSprites)
+        {
+            DoudizhuUiRefs refs = root.AddComponent<DoudizhuUiRefs>();
+            refs.CardFacePrefab = cardFacePrefab;
+            refs.CardBackPrefab = cardBackPrefab;
+            refs.ActionButtonPrefab = actionButtonPrefab;
+            refs.Background = background;
+            refs.CardBack = cardBack;
+            refs.Joker = joker;
+            refs.SmallJoker = smallKing;
+            refs.BigJoker = bigKing;
+            refs.SuitSpade = suitSpade;
+            refs.SuitHeart = suitHeart;
+            refs.SuitClub = suitClub;
+            refs.SuitDiamond = suitDiamond;
+
+            refs.RankSprites.Clear();
+            foreach (KeyValuePair<string, Sprite> entry in rankSprites)
+            {
+                refs.RankSprites.Add(new RankSpriteEntry { Key = entry.Key, Sprite = entry.Value });
             }
         }
 
