@@ -323,34 +323,7 @@ namespace Doudizhu.EditorTools
             RectTransform labelRect = label.GetComponent<RectTransform>();
             SetRect(labelRect, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(120f, 28f), new Vector2(0f, -6f));
 
-            List<CardData> cards = new List<CardData>
-            {
-                new CardData(rankSprites["A"], suitSpade, suitSpade),
-                new CardData(rankSprites["K"], suitHeart, suitHeart),
-                new CardData(rankSprites["Q"], suitClub, suitClub),
-                new CardData(rankSprites["J"], suitDiamond, suitDiamond),
-                new CardData(rankSprites["10"], suitSpade, suitSpade),
-                new CardData(rankSprites["9"], suitHeart, suitHeart),
-                new CardData(rankSprites["8"], suitClub, suitClub),
-                new CardData(rankSprites["7"], suitDiamond, suitDiamond),
-                new CardData(rankSprites["6"], suitSpade, suitSpade),
-                new CardData(rankSprites["5"], suitHeart, suitHeart),
-                new CardData(rankSprites["4"], suitClub, suitClub),
-                new CardData(rankSprites["3"], suitDiamond, suitDiamond),
-                new CardData(rankSprites["2"], suitSpade, suitSpade),
-                new CardData(joker, null, smallKing),
-                new CardData(joker, null, bigKing)
-            };
-
-            float startX = -(cards.Count - 1) * 28f * 0.5f;
-            for (int i = 0; i < cards.Count; i++)
-            {
-                GameObject card = InstantiatePrefab(cardFacePrefab, hand.transform);
-                card.name = $"HandCard_{i + 1}";
-                RectTransform cardRect = card.GetComponent<RectTransform>();
-                SetRect(cardRect, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(64f, 92f), new Vector2(startX + i * 28f, 10f));
-                ApplyCardVisual(card.transform, cards[i]);
-            }
+            // Hand cards are created by the runtime controller.
         }
 
         private static void CreateActionBar(Transform parent, GameObject buttonPrefab, Font font)
