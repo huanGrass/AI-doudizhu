@@ -1,6 +1,6 @@
 ﻿# One Click Execution Report
 
-时间：2026-01-23 14:35:24
+时间：2026-01-23 20:52:52
 工程路径：E:\workProject\unityProject\doudizhu
 镜像路径：E:\workProject\unityProject\doudizhu_mirror
 执行脚本：ci/one_click_check.bat
@@ -16,11 +16,11 @@
 - 当前分支：master
 - 本轮提交数：UNKNOWN
 - 提交记录：
+  - 1894b55 实现最小可运行斗地主逻辑与测试
   - 8b854dd 修正忽略资源目录并更新报告
   - 72f8484 使用参考图与资源重建界面
   - 311e114 添加忽略目录并提交项目文件
   - c4d4178 搭建斗地主基础界面框架
-  - ca6f256 添加斗地主最小规则说明
 - 是否已同步镜像：YES
 
 ## 测试执行情况
@@ -29,7 +29,7 @@
 - 是否执行：YES
 - 命令：ci/run_playmode_tests.bat
 - 结果文件：Logs/playmode-results.xml
-- 用例数：3
+- 用例数：4
 - 失败数：0
 
 ### EditMode Tests

@@ -11,22 +11,26 @@ namespace Doudizhu.Game
 
         private static void RunSimulation()
         {
-            GameEngine engine = new GameEngine(new AutoSingleStrategy(), 20260123);
-            int winner;
-            PlayAction action;
+            GameEngine engine = new GameEngine(new AutoGameStrategy(), 20260123);
             int safety = 0;
 
-            while (!engine.Step(out winner, out action))
+            while (engine.Phase != GamePhase.Finished)
             {
+                StepResult result = engine.Step();
                 safety++;
-                if (safety > 500)
+                if (safety > 800)
                 {
                     Debug.LogWarning("Simulation stopped: exceeded safety limit.");
                     return;
                 }
+
+                if (result.Kind == StepKind.Bid && result.BidScore > 0)
+                {
+                    Debug.Log($"Player{result.PlayerIndex + 1} bid {result.BidScore}");
+                }
             }
 
-            Debug.Log($"Winner is Player{winner + 1}");
+            Debug.Log($"Winner is Player{engine.CurrentPlayer + 1}");
         }
     }
 

@@ -32,23 +32,44 @@ namespace Doudizhu.Game.Tests
         }
 
         [Test]
-        public void AutoGameFinishesWithWinner()
+        public void BiddingAssignsLandlordAndAddsBottomCards()
         {
-            GameEngine engine = new GameEngine(new AutoSingleStrategy(), 42);
-            int winner;
-            PlayAction action;
+            GameEngine engine = new GameEngine(new AutoGameStrategy(), 7);
             int safety = 0;
 
-            while (!engine.Step(out winner, out action))
+            while (engine.Phase == GamePhase.Bidding)
             {
+                engine.Step();
                 safety++;
-                if (safety > 500)
+                if (safety > 10)
                 {
-                    Assert.Fail("Game did not finish within 500 steps.");
+                    Assert.Fail("Bidding did not finish quickly.");
                 }
             }
 
-            Assert.IsTrue(winner >= 0 && winner < 3);
+            int landlord = engine.LandlordIndex;
+            Assert.IsTrue(landlord >= 0 && landlord < 3);
+            Assert.AreEqual(PlayerRole.Landlord, engine.Players[landlord].Role);
+            Assert.AreEqual(20, engine.Players[landlord].Hand.Count);
+        }
+
+        [Test]
+        public void AutoGameFinishesWithWinner()
+        {
+            GameEngine engine = new GameEngine(new AutoGameStrategy(), 42);
+            int safety = 0;
+
+            while (engine.Phase != GamePhase.Finished)
+            {
+                engine.Step();
+                safety++;
+                if (safety > 800)
+                {
+                    Assert.Fail("Game did not finish within 800 steps.");
+                }
+            }
+
+            Assert.IsTrue(engine.CurrentPlayer >= 0 && engine.CurrentPlayer < 3);
         }
     }
 }
