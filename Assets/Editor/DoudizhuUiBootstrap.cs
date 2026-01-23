@@ -15,7 +15,7 @@ namespace Doudizhu.EditorTools
         private const string UiRootName = "UIRoot";
         private const string PrefabRoot = "Assets/Prefabs";
         private const string UiPrefabRoot = "Assets/Prefabs/UI";
-        private const string ArtRoot = "Assets/Art";
+        private const string ArtRoot = "Assets/Resources/Art";
 
         private const float CanvasWidth = 1280f;
         private const float CanvasHeight = 720f;

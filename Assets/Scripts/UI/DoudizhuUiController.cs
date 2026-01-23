@@ -129,6 +129,7 @@ namespace Doudizhu.UI
             {
                 GameObject buttonObj = Instantiate(refs.ActionButtonPrefab, _bidBar.transform);
                 buttonObj.name = $"BidButton_{labels[i]}";
+                buttonObj.SetActive(true);
                 RectTransform btnRect = buttonObj.GetComponent<RectTransform>();
                 btnRect.sizeDelta = new Vector2(90f, 36f);
                 btnRect.anchoredPosition = new Vector2(startX + i * 70f, 0f);
@@ -245,6 +246,7 @@ namespace Doudizhu.UI
             {
                 _selectedIndex = -1;
             }
+
             EnsureHandSlots(hand.Count);
 
             float startX = -(hand.Count - 1) * HandSpacing * 0.5f;
@@ -512,10 +514,10 @@ namespace Doudizhu.UI
                 return;
             }
 
-            List<Card> hand = _engine.Players[LocalPlayerIndex].Hand;
             PlayAction action = _strategy.BuildAutoPlay(_engine.Players[LocalPlayerIndex], _engine.LastPlay);
             if (action.Type == PlayType.Single && action.Cards.Count > 0)
             {
+                List<Card> hand = _engine.Players[LocalPlayerIndex].Hand;
                 int index = hand.IndexOf(action.Cards[0]);
                 _selectedIndex = index;
                 UpdateHand();
