@@ -1,6 +1,6 @@
 ﻿# One Click Execution Report
 
-时间：2026-01-23 21:26:19
+时间：2026-01-23 21:33:52
 工程路径：E:\workProject\unityProject\doudizhu
 镜像路径：E:\workProject\unityProject\doudizhu_mirror
 执行脚本：ci/one_click_check.bat
@@ -16,11 +16,11 @@
 - 当前分支：master
 - 本轮提交数：UNKNOWN
 - 提交记录：
+  - 0de0a0e 清理场景静态手牌避免运行叠加
   - 9259a7a 阻止UI场景自动运行模拟逻辑
   - fcabf39 修复输入系统导致的运行错误
   - bcc6949 接入UI交互驱动叫分与出牌
   - 76ab483 加入叫分与回合状态机逻辑
-  - 1894b55 实现最小可运行斗地主逻辑与测试
 - 是否已同步镜像：YES
 
 ## 测试执行情况

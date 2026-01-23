@@ -19,6 +19,8 @@ namespace Doudizhu.UI
 
         private Transform _handArea;
         private readonly List<GameObject> _handCards = new List<GameObject>();
+        private Transform _tableArea;
+        private readonly List<GameObject> _tableCards = new List<GameObject>();
 
         private Text _centerTip;
         private Text _statusText;
@@ -79,6 +81,7 @@ namespace Doudizhu.UI
         {
             Transform root = transform;
             _handArea = root.Find("HandArea");
+            _tableArea = root.Find("TableArea");
             _actionBar = root.Find("ActionBar")?.gameObject;
             _centerTip = root.Find("TableArea/CenterTip")?.GetComponent<Text>();
             _statusText = root.Find("TopBar/Status")?.GetComponent<Text>();
@@ -158,6 +161,7 @@ namespace Doudizhu.UI
             UpdatePhaseUi();
             UpdatePlayerPanels();
             UpdateHand();
+            UpdateTableCards();
         }
 
         private void UpdatePhaseUi()
@@ -241,6 +245,65 @@ namespace Doudizhu.UI
                 {
                     cardObj.SetActive(false);
                 }
+            }
+        }
+
+        private void UpdateTableCards()
+        {
+            if (_tableArea == null || refs == null)
+            {
+                return;
+            }
+
+            PlayAction? lastPlay = _engine.LastPlay;
+            if (lastPlay == null || lastPlay.Value.Type == PlayType.Pass || lastPlay.Value.Cards.Count == 0)
+            {
+                SetTableCardsActive(false);
+                return;
+            }
+
+            List<Card> cards = lastPlay.Value.Cards;
+            EnsureTableSlots(cards.Count);
+
+            float startX = -(cards.Count - 1) * HandSpacing * 0.5f;
+            for (int i = 0; i < _tableCards.Count; i++)
+            {
+                GameObject cardObj = _tableCards[i];
+                if (i < cards.Count)
+                {
+                    cardObj.SetActive(true);
+                    RectTransform rect = cardObj.GetComponent<RectTransform>();
+                    rect.sizeDelta = new Vector2(HandCardWidth, HandCardHeight);
+                    rect.anchoredPosition = new Vector2(startX + i * HandSpacing, -10f);
+                    ApplyCardVisual(cardObj.transform, cards[i]);
+                }
+                else
+                {
+                    cardObj.SetActive(false);
+                }
+            }
+        }
+
+        private void EnsureTableSlots(int count)
+        {
+            if (refs.CardFacePrefab == null)
+            {
+                return;
+            }
+
+            while (_tableCards.Count < count)
+            {
+                GameObject card = Instantiate(refs.CardFacePrefab, _tableArea);
+                card.name = $"TableCard_{_tableCards.Count + 1}";
+                _tableCards.Add(card);
+            }
+        }
+
+        private void SetTableCardsActive(bool active)
+        {
+            for (int i = 0; i < _tableCards.Count; i++)
+            {
+                _tableCards[i].SetActive(active);
             }
         }
 
