@@ -417,8 +417,9 @@ namespace Doudizhu.UI
 
             if (data.Rank == CardRank.JokerSmall || data.Rank == CardRank.JokerBig)
             {
-                if (rank != null) rank.sprite = refs.Joker;
-                if (center != null) center.sprite = data.Rank == CardRank.JokerBig ? refs.BigJoker : refs.SmallJoker;
+                Sprite jokerSprite = data.Rank == CardRank.JokerBig ? refs.BigJoker : refs.SmallJoker;
+                if (rank != null) rank.sprite = jokerSprite;
+                if (center != null) center.sprite = jokerSprite;
                 if (suit != null) suit.sprite = null;
             }
             else
@@ -433,6 +434,13 @@ namespace Doudizhu.UI
             if (center != null) center.preserveAspect = true;
             if (suit != null) suit.enabled = suit.sprite != null;
             if (center != null) center.enabled = center.sprite != null;
+
+            if (rank != null)
+            {
+                RectTransform rect = rank.GetComponent<RectTransform>();
+                float width = data.Rank == CardRank.Ten ? 28f : 22f;
+                rect.sizeDelta = new Vector2(width, rect.sizeDelta.y);
+            }
         }
 
         private void ToggleSelection(int index)
