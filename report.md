@@ -1,6 +1,6 @@
 ﻿# One Click Execution Report
 
-时间：2026-01-21 13:13:33
+时间：2026-01-23 11:16:09
 工程路径：E:\workProject\unityProject\doudizhu
 镜像路径：E:\workProject\unityProject\doudizhu_mirror
 执行脚本：ci/one_click_check.bat
@@ -16,6 +16,8 @@
 - 当前分支：master
 - 本轮提交数：UNKNOWN
 - 提交记录：
+  - 72f8484 使用参考图与资源重建界面
+  - 311e114 添加忽略目录并提交项目文件
   - c4d4178 搭建斗地主基础界面框架
   - ca6f256 添加斗地主最小规则说明
 - 是否已同步镜像：YES
@@ -48,7 +50,7 @@
 
 ### 截图观察点
 （至少列出一个具体观察点，用于满足 AGENTS.md 要求）
-- ui_shot_1.png 观察点：版面结构清晰，顶部标题与右上状态栏对齐正常，底部操作按钮间距一致。
+- ui_shot_1.png 观察点：背景与牌桌贴图正确铺满，底部手牌展示覆盖了大小王图案与花色，左右玩家信息区与头像位置清晰。
 
 ## 异常记录
 - 是否出现异常：否
