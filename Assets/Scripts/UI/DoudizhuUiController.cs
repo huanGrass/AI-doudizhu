@@ -419,9 +419,8 @@ namespace Doudizhu.UI
 
             if (data.Rank == CardRank.JokerSmall || data.Rank == CardRank.JokerBig)
             {
-                Sprite jokerSprite = data.Rank == CardRank.JokerBig ? refs.BigJoker : refs.SmallJoker;
-                if (rank != null) rank.sprite = jokerSprite;
-                if (center != null) center.sprite = jokerSprite;
+                if (rank != null) rank.sprite = refs.Joker;
+                if (center != null) center.sprite = refs.Joker;
                 if (suit != null) suit.sprite = null;
             }
             else
@@ -440,7 +439,7 @@ namespace Doudizhu.UI
             if (rank != null)
             {
                 RectTransform rect = rank.GetComponent<RectTransform>();
-                float width = data.Rank == CardRank.Ten ? 28f : 22f;
+                float width = data.Rank == CardRank.Ten ? 32f : 22f;
                 rect.sizeDelta = new Vector2(width, rect.sizeDelta.y);
             }
         }
