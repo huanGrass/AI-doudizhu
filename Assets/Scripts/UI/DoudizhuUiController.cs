@@ -13,6 +13,9 @@ namespace Doudizhu.UI
         private const float HandSpacing = 28f;
         private const float HandCardWidth = 64f;
         private const float HandCardHeight = 92f;
+        private const float TableSpacing = 24f;
+        private const float TableCardWidth = 56f;
+        private const float TableCardHeight = 80f;
 
         private GameEngine _engine;
         private UiInputStrategy _strategy;
@@ -20,7 +23,10 @@ namespace Doudizhu.UI
         private Transform _handArea;
         private readonly List<GameObject> _handCards = new List<GameObject>();
         private Transform _tableArea;
-        private readonly List<GameObject> _tableCards = new List<GameObject>();
+        private readonly Dictionary<int, RectTransform> _playAreas = new Dictionary<int, RectTransform>();
+        private readonly Dictionary<int, List<GameObject>> _playCards = new Dictionary<int, List<GameObject>>();
+        private readonly Dictionary<int, List<Card>> _lastPlays = new Dictionary<int, List<Card>>();
+        private int _selectedIndex = -1;
 
         private Text _centerTip;
         private Text _statusText;
@@ -43,6 +49,7 @@ namespace Doudizhu.UI
             }
 
             CacheUi();
+            EnsurePlayAreas();
             BuildBidBar();
             WireActionButtons();
 
@@ -153,6 +160,7 @@ namespace Doudizhu.UI
                 _statusText.text = $"叫分：{result.BidScore}  |  玩家 {result.PlayerIndex + 1}";
             }
 
+            RecordPlay(result);
             RefreshAll();
         }
 
@@ -174,6 +182,7 @@ namespace Doudizhu.UI
             if (_engine.Phase == GamePhase.Bidding)
             {
                 _centerTip.text = "叫分阶段";
+                ClearAllTablePlays();
                 SetActionBarActive(false);
                 SetBidBarActive(true);
             }
@@ -226,7 +235,16 @@ namespace Doudizhu.UI
                 return;
             }
 
+            if (_engine.Phase == GamePhase.Playing && _engine.CurrentPlayer != LocalPlayerIndex)
+            {
+                _selectedIndex = -1;
+            }
+
             List<Card> hand = _engine.Players[LocalPlayerIndex].Hand;
+            if (_selectedIndex >= hand.Count)
+            {
+                _selectedIndex = -1;
+            }
             EnsureHandSlots(hand.Count);
 
             float startX = -(hand.Count - 1) * HandSpacing * 0.5f;
@@ -238,13 +256,70 @@ namespace Doudizhu.UI
                     cardObj.SetActive(true);
                     RectTransform rect = cardObj.GetComponent<RectTransform>();
                     rect.sizeDelta = new Vector2(HandCardWidth, HandCardHeight);
-                    rect.anchoredPosition = new Vector2(startX + i * HandSpacing, 10f);
+                    float y = 10f + (i == _selectedIndex ? 20f : 0f);
+                    rect.anchoredPosition = new Vector2(startX + i * HandSpacing, y);
                     ApplyCardVisual(cardObj.transform, hand[i]);
+
+                    Button button = cardObj.GetComponent<Button>();
+                    if (button == null)
+                    {
+                        button = cardObj.AddComponent<Button>();
+                    }
+                    button.onClick.RemoveAllListeners();
+                    int index = i;
+                    button.onClick.AddListener(() => ToggleSelection(index));
                 }
                 else
                 {
                     cardObj.SetActive(false);
                 }
+            }
+        }
+
+        private void EnsurePlayAreas()
+        {
+            if (_tableArea == null || _playAreas.Count > 0)
+            {
+                return;
+            }
+
+            _playAreas[LocalPlayerIndex] = CreatePlayArea("PlayArea_Bottom", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(260f, 100f), new Vector2(0f, -60f));
+            _playAreas[1] = CreatePlayArea("PlayArea_Left", new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(200f, 100f), new Vector2(40f, 40f));
+            _playAreas[2] = CreatePlayArea("PlayArea_Right", new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(200f, 100f), new Vector2(-40f, 40f));
+        }
+
+        private RectTransform CreatePlayArea(string name, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 size, Vector2 anchoredPos)
+        {
+            GameObject area = new GameObject(name, typeof(RectTransform));
+            RectTransform rect = area.GetComponent<RectTransform>();
+            rect.SetParent(_tableArea, false);
+            rect.anchorMin = anchorMin;
+            rect.anchorMax = anchorMax;
+            rect.pivot = pivot;
+            rect.sizeDelta = size;
+            rect.anchoredPosition = anchoredPos;
+            return rect;
+        }
+
+        private void RecordPlay(StepResult result)
+        {
+            if (result.Kind == StepKind.Play && result.Play.Cards.Count > 0)
+            {
+                _lastPlays[result.PlayerIndex] = new List<Card>(result.Play.Cards);
+            }
+
+            if (_engine.LastPlay == null)
+            {
+                ClearAllTablePlays();
+            }
+        }
+
+        private void ClearAllTablePlays()
+        {
+            _lastPlays.Clear();
+            foreach (KeyValuePair<int, List<GameObject>> entry in _playCards)
+            {
+                SetPlayCardsActive(entry.Value, false);
             }
         }
 
@@ -255,55 +330,67 @@ namespace Doudizhu.UI
                 return;
             }
 
-            PlayAction? lastPlay = _engine.LastPlay;
-            if (lastPlay == null || lastPlay.Value.Type == PlayType.Pass || lastPlay.Value.Cards.Count == 0)
+            foreach (KeyValuePair<int, RectTransform> area in _playAreas)
             {
-                SetTableCardsActive(false);
-                return;
-            }
-
-            List<Card> cards = lastPlay.Value.Cards;
-            EnsureTableSlots(cards.Count);
-
-            float startX = -(cards.Count - 1) * HandSpacing * 0.5f;
-            for (int i = 0; i < _tableCards.Count; i++)
-            {
-                GameObject cardObj = _tableCards[i];
-                if (i < cards.Count)
+                int playerIndex = area.Key;
+                if (_lastPlays.TryGetValue(playerIndex, out List<Card> cards) && cards.Count > 0)
                 {
-                    cardObj.SetActive(true);
-                    RectTransform rect = cardObj.GetComponent<RectTransform>();
-                    rect.sizeDelta = new Vector2(HandCardWidth, HandCardHeight);
-                    rect.anchoredPosition = new Vector2(startX + i * HandSpacing, -10f);
-                    ApplyCardVisual(cardObj.transform, cards[i]);
+                    EnsurePlaySlots(playerIndex, cards.Count);
+                    List<GameObject> slots = _playCards[playerIndex];
+                    float startX = -(cards.Count - 1) * TableSpacing * 0.5f;
+                    for (int i = 0; i < slots.Count; i++)
+                    {
+                        GameObject cardObj = slots[i];
+                        if (i < cards.Count)
+                        {
+                            cardObj.SetActive(true);
+                            RectTransform rect = cardObj.GetComponent<RectTransform>();
+                            rect.sizeDelta = new Vector2(TableCardWidth, TableCardHeight);
+                            rect.anchoredPosition = new Vector2(startX + i * TableSpacing, 0f);
+                            ApplyCardVisual(cardObj.transform, cards[i]);
+                        }
+                        else
+                        {
+                            cardObj.SetActive(false);
+                        }
+                    }
                 }
                 else
                 {
-                    cardObj.SetActive(false);
+                    if (_playCards.TryGetValue(playerIndex, out List<GameObject> slots))
+                    {
+                        SetPlayCardsActive(slots, false);
+                    }
                 }
             }
         }
 
-        private void EnsureTableSlots(int count)
+        private void EnsurePlaySlots(int playerIndex, int count)
         {
-            if (refs.CardFacePrefab == null)
+            if (refs.CardFacePrefab == null || !_playAreas.TryGetValue(playerIndex, out RectTransform area))
             {
                 return;
             }
 
-            while (_tableCards.Count < count)
+            if (!_playCards.TryGetValue(playerIndex, out List<GameObject> slots))
             {
-                GameObject card = Instantiate(refs.CardFacePrefab, _tableArea);
-                card.name = $"TableCard_{_tableCards.Count + 1}";
-                _tableCards.Add(card);
+                slots = new List<GameObject>();
+                _playCards[playerIndex] = slots;
+            }
+
+            while (slots.Count < count)
+            {
+                GameObject card = Instantiate(refs.CardFacePrefab, area);
+                card.name = $"PlayCard_{playerIndex}_{slots.Count + 1}";
+                slots.Add(card);
             }
         }
 
-        private void SetTableCardsActive(bool active)
+        private static void SetPlayCardsActive(List<GameObject> cards, bool active)
         {
-            for (int i = 0; i < _tableCards.Count; i++)
+            for (int i = 0; i < cards.Count; i++)
             {
-                _tableCards[i].SetActive(active);
+                cards[i].SetActive(active);
             }
         }
 
@@ -348,6 +435,17 @@ namespace Doudizhu.UI
             if (center != null) center.enabled = center.sprite != null;
         }
 
+        private void ToggleSelection(int index)
+        {
+            if (_engine.Phase != GamePhase.Playing || _engine.CurrentPlayer != LocalPlayerIndex)
+            {
+                return;
+            }
+
+            _selectedIndex = _selectedIndex == index ? -1 : index;
+            UpdateHand();
+        }
+
         private void OnBidClicked(int bid)
         {
             if (_engine.Phase != GamePhase.Bidding)
@@ -371,7 +469,18 @@ namespace Doudizhu.UI
                 return;
             }
 
-            PlayAction action = _strategy.BuildAutoPlay(_engine.Players[LocalPlayerIndex], _engine.LastPlay);
+            List<Card> hand = _engine.Players[LocalPlayerIndex].Hand;
+            PlayAction action;
+            if (_selectedIndex >= 0 && _selectedIndex < hand.Count)
+            {
+                action = PlayAction.Single(hand[_selectedIndex]);
+            }
+            else
+            {
+                action = _strategy.BuildAutoPlay(_engine.Players[LocalPlayerIndex], _engine.LastPlay);
+            }
+
+            _selectedIndex = -1;
             _strategy.SetPlay(action);
             StepAndRefresh();
         }
@@ -383,6 +492,7 @@ namespace Doudizhu.UI
                 return;
             }
 
+            _selectedIndex = -1;
             _strategy.SetPlay(PlayAction.Pass());
             StepAndRefresh();
         }
@@ -394,9 +504,14 @@ namespace Doudizhu.UI
                 return;
             }
 
+            List<Card> hand = _engine.Players[LocalPlayerIndex].Hand;
             PlayAction action = _strategy.BuildAutoPlay(_engine.Players[LocalPlayerIndex], _engine.LastPlay);
-            _strategy.SetPlay(action);
-            StepAndRefresh();
+            if (action.Type == PlayType.Single && action.Cards.Count > 0)
+            {
+                int index = hand.IndexOf(action.Cards[0]);
+                _selectedIndex = index;
+                UpdateHand();
+            }
         }
 
         private sealed class PlayerPanelView

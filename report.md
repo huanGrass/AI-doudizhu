@@ -1,6 +1,6 @@
 ﻿# One Click Execution Report
 
-时间：2026-01-23 21:33:52
+时间：2026-01-23 21:45:31
 工程路径：E:\workProject\unityProject\doudizhu
 镜像路径：E:\workProject\unityProject\doudizhu_mirror
 执行脚本：ci/one_click_check.bat
@@ -16,11 +16,11 @@
 - 当前分支：master
 - 本轮提交数：UNKNOWN
 - 提交记录：
+  - 58138e1 桌面展示最新出牌
   - 0de0a0e 清理场景静态手牌避免运行叠加
   - 9259a7a 阻止UI场景自动运行模拟逻辑
   - fcabf39 修复输入系统导致的运行错误
   - bcc6949 接入UI交互驱动叫分与出牌
-  - 76ab483 加入叫分与回合状态机逻辑
 - 是否已同步镜像：YES
 
 ## 测试执行情况
@@ -51,7 +51,7 @@
 
 ### 截图观察点
 （至少列出一个具体观察点，用于满足 AGENTS.md 要求）
-- ui_shot_1.png 观察点：手牌区已不再有静态牌面，按钮区域仍在底部且对齐正常，顶部分牌与桌面提示保持居中。
+- ui_shot_1.png 观察点：桌面中央无出牌牌面（符合初始未出牌状态），按钮与底牌仍对齐正常。
 
 ## 异常记录
 - 是否出现异常：否
