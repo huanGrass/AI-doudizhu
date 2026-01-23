@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using Doudizhu.UI;
+using UnityEngine;
 
 namespace Doudizhu.Game
 {
@@ -39,6 +40,11 @@ namespace Doudizhu.Game
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Bootstrap()
         {
+            if (Object.FindAnyObjectByType<DoudizhuUiController>() != null)
+            {
+                return;
+            }
+
             GameObject obj = new GameObject("GameRunner");
             obj.AddComponent<GameRunner>();
             Object.DontDestroyOnLoad(obj);
