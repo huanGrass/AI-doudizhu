@@ -4,6 +4,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.InputSystem.UI;
 using UnityEngine.UI;
 
 namespace Doudizhu.EditorTools
@@ -602,13 +603,24 @@ namespace Doudizhu.EditorTools
 
         private static void EnsureEventSystem()
         {
-            if (Object.FindAnyObjectByType<EventSystem>() != null)
+            EventSystem existing = Object.FindAnyObjectByType<EventSystem>();
+            if (existing == null)
             {
+                GameObject system = new GameObject("EventSystem", typeof(EventSystem), typeof(InputSystemUIInputModule));
+                system.transform.SetParent(null, false);
                 return;
             }
 
-            GameObject system = new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
-            system.transform.SetParent(null, false);
+            StandaloneInputModule legacy = existing.GetComponent<StandaloneInputModule>();
+            if (legacy != null)
+            {
+                Object.DestroyImmediate(legacy);
+            }
+
+            if (existing.GetComponent<InputSystemUIInputModule>() == null)
+            {
+                existing.gameObject.AddComponent<InputSystemUIInputModule>();
+            }
         }
 
         private readonly struct CardData
