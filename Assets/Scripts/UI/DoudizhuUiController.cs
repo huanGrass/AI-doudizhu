@@ -23,9 +23,13 @@ namespace Doudizhu.UI
         private Transform _handArea;
         private readonly List<GameObject> _handCards = new List<GameObject>();
         private Transform _tableArea;
+        private Transform _bottomArea;
+        private readonly List<GameObject> _bottomBacks = new List<GameObject>();
+        private readonly List<GameObject> _bottomFaces = new List<GameObject>();
         private readonly Dictionary<int, RectTransform> _playAreas = new Dictionary<int, RectTransform>();
         private readonly Dictionary<int, List<GameObject>> _playCards = new Dictionary<int, List<GameObject>>();
         private readonly Dictionary<int, List<Card>> _lastPlays = new Dictionary<int, List<Card>>();
+        private readonly Dictionary<int, Text> _passLabels = new Dictionary<int, Text>();
         private readonly HashSet<int> _selectedIndices = new HashSet<int>();
 
         private Text _centerTip;
@@ -40,6 +44,10 @@ namespace Doudizhu.UI
         private Button _playButton;
         private Button _passButton;
         private Button _hintButton;
+        private float _nextAiPlayTime;
+        private int _lastObservedPlayer = -1;
+
+        private const float AiPlayDelay = 1f;
 
         private void Awake()
         {
@@ -66,6 +74,15 @@ namespace Doudizhu.UI
                 return;
             }
 
+            if (_engine.CurrentPlayer != _lastObservedPlayer)
+            {
+                _lastObservedPlayer = _engine.CurrentPlayer;
+                if (_engine.Phase == GamePhase.Playing && _engine.CurrentPlayer != LocalPlayerIndex)
+                {
+                    _nextAiPlayTime = Time.time + AiPlayDelay;
+                }
+            }
+
             if (_engine.Phase == GamePhase.Bidding)
             {
                 if (_engine.CurrentPlayer == LocalPlayerIndex && !_strategy.HasPendingBid)
@@ -79,6 +96,11 @@ namespace Doudizhu.UI
                 {
                     return;
                 }
+
+                if (_engine.CurrentPlayer != LocalPlayerIndex && Time.time < _nextAiPlayTime)
+                {
+                    return;
+                }
             }
 
             StepAndRefresh();
@@ -89,6 +111,7 @@ namespace Doudizhu.UI
             Transform root = transform;
             _handArea = root.Find("HandArea");
             _tableArea = root.Find("TableArea");
+            _bottomArea = root.Find("BottomCards");
             _actionBar = root.Find("ActionBar")?.gameObject;
             _centerTip = root.Find("TableArea/CenterTip")?.GetComponent<Text>();
             _statusText = root.Find("TopBar/Status")?.GetComponent<Text>();
@@ -103,6 +126,8 @@ namespace Doudizhu.UI
                 _passButton = _actionBar.transform.Find("ActionButton_不出")?.GetComponent<Button>();
                 _hintButton = _actionBar.transform.Find("ActionButton_提示")?.GetComponent<Button>();
             }
+
+            CacheBottomCards();
         }
 
         private void BuildBidBar()
@@ -171,6 +196,7 @@ namespace Doudizhu.UI
             UpdatePlayerPanels();
             UpdateHand();
             UpdateTableCards();
+            UpdateBottomCards();
         }
 
         private void UpdatePhaseUi()
@@ -300,6 +326,11 @@ namespace Doudizhu.UI
             _playAreas[LocalPlayerIndex] = CreatePlayArea("PlayArea_Bottom", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(260f, 100f), new Vector2(0f, -60f));
             _playAreas[1] = CreatePlayArea("PlayArea_Left", new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(200f, 100f), new Vector2(40f, 40f));
             _playAreas[2] = CreatePlayArea("PlayArea_Right", new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(200f, 100f), new Vector2(-40f, 40f));
+
+            foreach (KeyValuePair<int, RectTransform> entry in _playAreas)
+            {
+                _passLabels[entry.Key] = CreatePassLabel(entry.Value);
+            }
         }
 
         private RectTransform CreatePlayArea(string name, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 size, Vector2 anchoredPos)
@@ -320,6 +351,11 @@ namespace Doudizhu.UI
             if (result.Kind == StepKind.Play && result.Play.Cards.Count > 0)
             {
                 _lastPlays[result.PlayerIndex] = new List<Card>(result.Play.Cards);
+                SetPassLabelActive(result.PlayerIndex, false);
+            }
+            else if (result.Kind == StepKind.Pass)
+            {
+                SetPassLabelActive(result.PlayerIndex, true);
             }
 
             if (_engine.LastPlay == null)
@@ -334,6 +370,11 @@ namespace Doudizhu.UI
             foreach (KeyValuePair<int, List<GameObject>> entry in _playCards)
             {
                 SetPlayCardsActive(entry.Value, false);
+            }
+
+            foreach (int key in _passLabels.Keys)
+            {
+                SetPassLabelActive(key, false);
             }
         }
 
@@ -432,7 +473,7 @@ namespace Doudizhu.UI
             if (data.Rank == CardRank.JokerSmall || data.Rank == CardRank.JokerBig)
             {
                 if (rank != null) rank.sprite = refs.Joker;
-                if (center != null) center.sprite = refs.Joker;
+                if (center != null) center.sprite = data.Rank == CardRank.JokerSmall ? refs.SmallJoker : refs.BigJoker;
                 if (suit != null) suit.sprite = null;
             }
             else
@@ -451,8 +492,37 @@ namespace Doudizhu.UI
             if (rank != null)
             {
                 RectTransform rect = rank.GetComponent<RectTransform>();
-                float width = data.Rank == CardRank.Ten ? 32f : 22f;
-                rect.sizeDelta = new Vector2(width, rect.sizeDelta.y);
+                if (data.Rank == CardRank.JokerSmall || data.Rank == CardRank.JokerBig)
+                {
+                    rect.sizeDelta = new Vector2(20f, 52f);
+                    rect.anchoredPosition = new Vector2(8f, -6f);
+                }
+                else
+                {
+                    float width = data.Rank == CardRank.Ten ? 32f : 22f;
+                    rect.sizeDelta = new Vector2(width, rect.sizeDelta.y);
+                    rect.anchoredPosition = new Vector2(6f, -6f);
+                }
+
+                rank.color = GetRankColor(data);
+            }
+
+            if (suit != null)
+            {
+                suit.color = Color.white;
+            }
+
+            if (center != null)
+            {
+                RectTransform centerRect = center.GetComponent<RectTransform>();
+                if (data.Rank == CardRank.JokerSmall || data.Rank == CardRank.JokerBig)
+                {
+                    centerRect.sizeDelta = new Vector2(48f, 48f);
+                }
+                else
+                {
+                    centerRect.sizeDelta = new Vector2(36f, 36f);
+                }
             }
         }
 
@@ -507,7 +577,7 @@ namespace Doudizhu.UI
             }
             else
             {
-                action = _strategy.BuildAutoPlay(_engine.Players[LocalPlayerIndex], _engine.LastPlay);
+                return;
             }
 
             _selectedIndices.Clear();
@@ -582,6 +652,112 @@ namespace Doudizhu.UI
             }
 
             UpdateHand();
+        }
+
+        private void UpdateBottomCards()
+        {
+            if (_bottomArea == null || refs == null || _engine == null)
+            {
+                return;
+            }
+
+            EnsureBottomFaceSlots(3);
+            bool showFaces = _engine.Phase != GamePhase.Bidding;
+            for (int i = 0; i < _bottomBacks.Count; i++)
+            {
+                _bottomBacks[i].SetActive(!showFaces);
+            }
+
+            for (int i = 0; i < _bottomFaces.Count; i++)
+            {
+                GameObject face = _bottomFaces[i];
+                if (showFaces && i < _engine.BottomCards.Count)
+                {
+                    face.SetActive(true);
+                    ApplyCardVisual(face.transform, _engine.BottomCards[i]);
+                }
+                else
+                {
+                    face.SetActive(false);
+                }
+            }
+        }
+
+        private void CacheBottomCards()
+        {
+            _bottomBacks.Clear();
+            if (_bottomArea == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < _bottomArea.childCount; i++)
+            {
+                Transform child = _bottomArea.GetChild(i);
+                _bottomBacks.Add(child.gameObject);
+            }
+        }
+
+        private void EnsureBottomFaceSlots(int count)
+        {
+            if (refs.CardFacePrefab == null || _bottomArea == null)
+            {
+                return;
+            }
+
+            while (_bottomFaces.Count < count)
+            {
+                GameObject card = Instantiate(refs.CardFacePrefab, _bottomArea);
+                card.name = $"BottomFace_{_bottomFaces.Count + 1}";
+                RectTransform rect = card.GetComponent<RectTransform>();
+                rect.sizeDelta = new Vector2(56f, 76f);
+                float offset = (_bottomFaces.Count - 1) * 40f;
+                rect.anchoredPosition = new Vector2(offset, 0f);
+                _bottomFaces.Add(card);
+            }
+        }
+
+        private Text CreatePassLabel(RectTransform parent)
+        {
+            GameObject obj = new GameObject("PassText", typeof(RectTransform), typeof(Text));
+            obj.transform.SetParent(parent, false);
+            Text text = obj.GetComponent<Text>();
+            text.text = "不出";
+            text.fontSize = 22;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.color = new Color(0.35f, 0.25f, 0.1f, 1f);
+            text.font = _centerTip != null ? _centerTip.font : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            RectTransform rect = obj.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = new Vector2(120f, 40f);
+            rect.anchoredPosition = Vector2.zero;
+            obj.SetActive(false);
+            return text;
+        }
+
+        private void SetPassLabelActive(int playerIndex, bool active)
+        {
+            if (_passLabels.TryGetValue(playerIndex, out Text label))
+            {
+                label.gameObject.SetActive(active);
+            }
+        }
+
+        private Color GetRankColor(Card data)
+        {
+            if (data.Rank == CardRank.JokerSmall)
+            {
+                return Color.black;
+            }
+
+            if (data.Suit == CardSuit.Spade || data.Suit == CardSuit.Club)
+            {
+                return Color.black;
+            }
+
+            return Color.white;
         }
 
         private sealed class PlayerPanelView

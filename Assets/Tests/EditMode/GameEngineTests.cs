@@ -117,5 +117,20 @@ namespace Doudizhu.Game.Tests
             Assert.IsTrue(PlayRules.CanBeat(bombPattern, straightPattern));
             Assert.IsTrue(PlayRules.CanBeat(rocketPattern, bombPattern));
         }
+
+        [Test]
+        public void AutoPlayLeadsWithPairWhenAvailable()
+        {
+            List<Card> hand = new List<Card>
+            {
+                new Card(CardSuit.Spade, CardRank.Five),
+                new Card(CardSuit.Heart, CardRank.Five),
+                new Card(CardSuit.Club, CardRank.Seven)
+            };
+
+            PlayAction action = PlayRules.FindAutoPlay(hand, null);
+            Assert.AreEqual(PlayType.Pair, action.Type);
+            Assert.AreEqual(2, action.Cards.Count);
+        }
     }
 }

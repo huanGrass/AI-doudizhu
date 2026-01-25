@@ -35,6 +35,7 @@ namespace Doudizhu.Game
         public GamePhase Phase => _phase;
         public int LandlordIndex => _bidHighPlayer;
         public PlayAction? LastPlay => _lastPlay;
+        public IReadOnlyList<Card> BottomCards => _bottomCards;
 
         private void Setup()
         {

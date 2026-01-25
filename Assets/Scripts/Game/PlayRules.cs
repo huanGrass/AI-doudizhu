@@ -174,8 +174,7 @@ namespace Doudizhu.Game
 
             if (lastPlay == null || lastPlay.Value.Type == PlayType.Pass)
             {
-                hand.Sort();
-                return PlayAction.FromCards(new List<Card> { hand[0] });
+                return FindLeadPlay(hand);
             }
 
             if (!TryEvaluate(lastPlay.Value.Cards, out PlayPattern lastPattern))
@@ -203,6 +202,64 @@ namespace Doudizhu.Game
             }
 
             if (lastPattern.Type == PlayType.Bomb && TryFindBomb(hand, lastPattern.MainRank, out cards))
+            {
+                return PlayAction.FromCards(cards);
+            }
+
+            return PlayAction.Pass();
+        }
+
+        private static PlayAction FindLeadPlay(List<Card> hand)
+        {
+            Dictionary<int, List<Card>> buckets = BuildRankBuckets(hand);
+            List<int> ranks = SortedRanks(buckets);
+
+            if (TryFindAirplaneWithPairs(ranks, buckets, 2, 0, out List<Card> cards))
+            {
+                return PlayAction.FromCards(cards);
+            }
+
+            if (TryFindAirplaneWithSingles(ranks, buckets, 2, 0, out cards))
+            {
+                return PlayAction.FromCards(cards);
+            }
+
+            if (TryFindAirplane(ranks, buckets, 2, 0, out cards))
+            {
+                return PlayAction.FromCards(cards);
+            }
+
+            if (TryFindStraightPairs(ranks, buckets, 3, 0, out cards))
+            {
+                return PlayAction.FromCards(cards);
+            }
+
+            if (TryFindStraight(ranks, buckets, 5, 0, out cards))
+            {
+                return PlayAction.FromCards(cards);
+            }
+
+            if (TryFindTripleWithPair(ranks, buckets, 0, out cards))
+            {
+                return PlayAction.FromCards(cards);
+            }
+
+            if (TryFindTripleWithSingle(ranks, buckets, 0, out cards))
+            {
+                return PlayAction.FromCards(cards);
+            }
+
+            if (TryFindTriple(ranks, buckets, 0, out cards))
+            {
+                return PlayAction.FromCards(cards);
+            }
+
+            if (TryFindPair(ranks, buckets, 0, out cards))
+            {
+                return PlayAction.FromCards(cards);
+            }
+
+            if (TryFindSingle(ranks, buckets, 0, out cards))
             {
                 return PlayAction.FromCards(cards);
             }
