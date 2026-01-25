@@ -1,6 +1,6 @@
 ﻿# One Click Execution Report
 
-时间：2026-01-23 22:49:16
+时间：2026-01-25 16:03:17
 工程路径：E:\workProject\unityProject\doudizhu
 镜像路径：E:\workProject\unityProject\doudizhu_mirror
 执行脚本：ci/one_click_check.bat
@@ -16,11 +16,11 @@
 - 当前分支：master
 - 本轮提交数：UNKNOWN
 - 提交记录：
+  - 6a95100 完善出牌规则与UI显示
+  - e4767f4 更新AGENTS流程约束
+  - 3770dc7 修正10与JOKER显示并避免提示排序
   - 1277707 修复运行时点数贴图未加载
   - 5457c27 运行时动态生成UI并清空场景
-  - 9fbd951 修复10与大小王牌面显示
-  - e35f4d3 显示各家出牌并支持选牌上移
-  - 58138e1 桌面展示最新出牌
 - 是否已同步镜像：YES
 
 ## 测试执行情况
@@ -29,7 +29,7 @@
 - 是否执行：YES
 - 命令：ci/run_playmode_tests.bat
 - 结果文件：Logs/playmode-results.xml
-- 用例数：4
+- 用例数：5
 - 失败数：0
 
 ### EditMode Tests
@@ -51,7 +51,7 @@
 
 ### 截图观察点
 （至少列出一个具体观察点，用于满足 AGENTS.md 要求）
-- ui_shot_1.png 观察点：运行时界面稳定，桌面提示居中，按钮区与玩家信息区正常显示。
+- ui_shot_1.png 观察点：初始状态未出牌，桌面区域空白正常，按钮与玩家信息显示正常。
 
 ## 异常记录
 - 出现异常：截图未生成或日志缺失
