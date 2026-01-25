@@ -210,7 +210,7 @@ namespace Doudizhu.UI
             GameObject hand = new GameObject("HandArea", typeof(RectTransform));
             hand.transform.SetParent(parent, false);
             RectTransform rect = hand.GetComponent<RectTransform>();
-            SetRect(rect, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(960f, 160f), new Vector2(0f, 120f));
+            SetRect(rect, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(960f, 160f), new Vector2(0f, 70f));
 
             Text label = CreateText("HandLabel", hand.transform, "你的手牌", font, 18, TextAnchor.UpperLeft, Color.white);
             RectTransform labelRect = label.GetComponent<RectTransform>();
