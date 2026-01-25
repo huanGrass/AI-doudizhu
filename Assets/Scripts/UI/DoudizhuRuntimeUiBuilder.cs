@@ -22,6 +22,8 @@ namespace Doudizhu.UI
                 return;
             }
 
+            EnsureMainCamera();
+
             Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             if (font == null)
             {
@@ -394,6 +396,21 @@ namespace Doudizhu.UI
             {
                 existing.gameObject.AddComponent<InputSystemUIInputModule>();
             }
+        }
+
+        private static void EnsureMainCamera()
+        {
+            if (Object.FindAnyObjectByType<Camera>() != null)
+            {
+                return;
+            }
+
+            GameObject cameraObj = new GameObject("Main Camera", typeof(Camera), typeof(AudioListener));
+            cameraObj.tag = "MainCamera";
+            cameraObj.transform.position = new Vector3(0f, 0f, -10f);
+            Camera camera = cameraObj.GetComponent<Camera>();
+            camera.orthographic = true;
+            camera.orthographicSize = 5f;
         }
     }
 }

@@ -55,28 +55,7 @@ namespace Doudizhu.UI
 
         public PlayAction BuildAutoPlay(PlayerState player, PlayAction? lastPlay)
         {
-            if (player.Hand.Count == 0)
-            {
-                return PlayAction.Pass();
-            }
-
-            List<Card> sorted = new List<Card>(player.Hand);
-            sorted.Sort();
-            if (lastPlay == null || lastPlay.Value.Type == PlayType.Pass)
-            {
-                return PlayAction.Single(sorted[0]);
-            }
-
-            Card target = lastPlay.Value.Cards[0];
-            foreach (Card card in sorted)
-            {
-                if (card.CompareTo(target) > 0)
-                {
-                    return PlayAction.Single(card);
-                }
-            }
-
-            return PlayAction.Pass();
+            return PlayRules.FindAutoPlay(player.Hand, lastPlay);
         }
 
         private bool IsLocal(PlayerState player)

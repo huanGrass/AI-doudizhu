@@ -62,6 +62,7 @@ namespace Doudizhu.Game
             _players[1].Hand.AddRange(deal.Player1);
             _players[2].Hand.AddRange(deal.Player2);
             _bottomCards = deal.Bottom;
+            SortHands();
 
             _phase = GamePhase.Bidding;
             _currentPlayer = 0;
@@ -136,6 +137,7 @@ namespace Doudizhu.Game
             }
 
             _players[_bidHighPlayer].Hand.AddRange(_bottomCards);
+            _players[_bidHighPlayer].Hand.Sort();
             _phase = GamePhase.Playing;
             _currentPlayer = _bidHighPlayer;
             _lastPlay = null;
@@ -145,7 +147,8 @@ namespace Doudizhu.Game
 
         private StepResult StepPlay()
         {
-            PlayerState player = _players[_currentPlayer];
+            int actingPlayer = _currentPlayer;
+            PlayerState player = _players[actingPlayer];
             PlayAction action = _strategy.ChoosePlay(player, _lastPlay);
             action = EnsureLegalPlay(player, action, _lastPlay);
 
@@ -161,13 +164,13 @@ namespace Doudizhu.Game
                 _passCount = 0;
                 ApplyPlay(player, action);
                 _lastPlay = action;
-                _lastPlayer = _currentPlayer;
+                _lastPlayer = actingPlayer;
 
                 if (player.Hand.Count == 0)
                 {
                     _phase = GamePhase.Finished;
-                    winnerIndex = _currentPlayer;
-                    return new StepResult(GamePhase.Finished, StepKind.Finish, _currentPlayer, 0, action, winnerIndex);
+                    winnerIndex = actingPlayer;
+                    return new StepResult(GamePhase.Finished, StepKind.Finish, actingPlayer, 0, action, winnerIndex);
                 }
             }
 
@@ -180,7 +183,7 @@ namespace Doudizhu.Game
             }
 
             _currentPlayer = nextPlayer;
-            return new StepResult(_phase, kind, _currentPlayer, 0, action, winnerIndex);
+            return new StepResult(_phase, kind, actingPlayer, 0, action, winnerIndex);
         }
 
         private static PlayAction EnsureLegalPlay(PlayerState player, PlayAction action, PlayAction? lastPlay)
@@ -190,37 +193,31 @@ namespace Doudizhu.Game
                 return PlayAction.Pass();
             }
 
-            if (lastPlay == null || lastPlay.Value.Type == PlayType.Pass)
-            {
-                if (action.Type == PlayType.Single && player.Hand.Contains(action.Cards[0]))
-                {
-                    return action;
-                }
-
-                player.Hand.Sort();
-                return PlayAction.Single(player.Hand[0]);
-            }
-
             if (action.Type == PlayType.Pass)
             {
                 return action;
             }
 
-            Card target = lastPlay.Value.Cards[0];
-            if (player.Hand.Contains(action.Cards[0]) && action.Cards[0].CompareTo(target) > 0)
+            if (!PlayRules.CardsExistInHand(player.Hand, action.Cards))
             {
-                return action;
+                return PlayRules.FindAutoPlay(player.Hand, lastPlay);
             }
 
-            foreach (Card card in player.Hand)
+            if (PlayRules.TryEvaluate(action.Cards, out PlayPattern currentPattern))
             {
-                if (card.CompareTo(target) > 0)
+                if (lastPlay == null || lastPlay.Value.Type == PlayType.Pass)
                 {
-                    return PlayAction.Single(card);
+                    return PlayAction.FromCards(new List<Card>(action.Cards));
+                }
+
+                if (PlayRules.TryEvaluate(lastPlay.Value.Cards, out PlayPattern lastPattern)
+                    && PlayRules.CanBeat(currentPattern, lastPattern))
+                {
+                    return PlayAction.FromCards(new List<Card>(action.Cards));
                 }
             }
 
-            return PlayAction.Pass();
+            return PlayRules.FindAutoPlay(player.Hand, lastPlay);
         }
 
         private static void ApplyPlay(PlayerState player, PlayAction action)
@@ -228,6 +225,14 @@ namespace Doudizhu.Game
             foreach (Card card in action.Cards)
             {
                 player.Hand.Remove(card);
+            }
+        }
+
+        private void SortHands()
+        {
+            for (int i = 0; i < _players.Count; i++)
+            {
+                _players[i].Hand.Sort();
             }
         }
     }
@@ -296,8 +301,6 @@ namespace Doudizhu.Game
 
     public sealed class AutoGameStrategy : IGameStrategy
     {
-        private readonly AutoSingleStrategy _playStrategy = new AutoSingleStrategy();
-
         public int ChooseBid(PlayerState player, int currentHigh)
         {
             if (currentHigh >= 1)
@@ -310,36 +313,7 @@ namespace Doudizhu.Game
 
         public PlayAction ChoosePlay(PlayerState player, PlayAction? lastPlay)
         {
-            return _playStrategy.ChoosePlay(player, lastPlay);
-        }
-    }
-
-    public sealed class AutoSingleStrategy
-    {
-        public PlayAction ChoosePlay(PlayerState player, PlayAction? lastPlay)
-        {
-            player.Hand.Sort();
-
-            if (player.Hand.Count == 0)
-            {
-                return PlayAction.Pass();
-            }
-
-            if (lastPlay == null || lastPlay.Value.Type == PlayType.Pass)
-            {
-                return PlayAction.Single(player.Hand[0]);
-            }
-
-            Card target = lastPlay.Value.Cards[0];
-            foreach (Card card in player.Hand)
-            {
-                if (card.CompareTo(target) > 0)
-                {
-                    return PlayAction.Single(card);
-                }
-            }
-
-            return PlayAction.Pass();
+            return PlayRules.FindAutoPlay(player.Hand, lastPlay);
         }
     }
 }

@@ -110,6 +110,7 @@ namespace Doudizhu.EditorTools
             uiRoot.AddComponent<DoudizhuUiController>();
             EnsureBatchScreenshotProvider();
             EnsureEventSystem();
+            EnsureMainCamera();
 
             EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
             EditorSceneManager.SaveScene(EditorSceneManager.GetActiveScene());
@@ -594,6 +595,22 @@ namespace Doudizhu.EditorTools
             {
                 existing.gameObject.AddComponent<InputSystemUIInputModule>();
             }
+        }
+
+        private static void EnsureMainCamera()
+        {
+            if (Object.FindAnyObjectByType<Camera>() != null)
+            {
+                return;
+            }
+
+            GameObject cameraObj = new GameObject("Main Camera");
+            cameraObj.tag = "MainCamera";
+            Camera camera = cameraObj.AddComponent<Camera>();
+            cameraObj.AddComponent<AudioListener>();
+            cameraObj.transform.position = new Vector3(0f, 0f, -10f);
+            camera.orthographic = true;
+            camera.orthographicSize = 5f;
         }
 
         private readonly struct CardData

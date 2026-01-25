@@ -21,6 +21,14 @@ namespace Doudizhu.EditorTools
                 Object.DestroyImmediate(root);
             }
 
+            GameObject cameraObj = new GameObject("Main Camera");
+            cameraObj.tag = "MainCamera";
+            Camera camera = cameraObj.AddComponent<Camera>();
+            cameraObj.AddComponent<AudioListener>();
+            cameraObj.transform.position = new Vector3(0f, 0f, -10f);
+            camera.orthographic = true;
+            camera.orthographicSize = 5f;
+
             GameObject bootstrap = new GameObject("RuntimeBootstrap");
             bootstrap.AddComponent<DoudizhuRuntimeUiBuilder>();
 

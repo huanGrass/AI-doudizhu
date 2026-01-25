@@ -5,7 +5,20 @@ namespace Doudizhu.Game
     public enum PlayType
     {
         Pass,
-        Single
+        Single,
+        Pair,
+        Triple,
+        TripleWithSingle,
+        TripleWithPair,
+        Straight,
+        StraightPairs,
+        Airplane,
+        AirplaneWithSingles,
+        AirplaneWithPairs,
+        FourWithTwoSingles,
+        FourWithTwoPairs,
+        Bomb,
+        Rocket
     }
 
     public readonly struct PlayAction
@@ -27,6 +40,21 @@ namespace Doudizhu.Game
         public static PlayAction Single(Card card)
         {
             return new PlayAction(PlayType.Single, new List<Card> { card });
+        }
+
+        public static PlayAction FromCards(List<Card> cards)
+        {
+            if (cards == null || cards.Count == 0)
+            {
+                return Pass();
+            }
+
+            if (PlayRules.TryEvaluate(cards, out PlayPattern pattern))
+            {
+                return new PlayAction(pattern.Type, cards);
+            }
+
+            return Pass();
         }
     }
 }

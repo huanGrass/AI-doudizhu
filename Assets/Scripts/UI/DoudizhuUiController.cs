@@ -26,7 +26,7 @@ namespace Doudizhu.UI
         private readonly Dictionary<int, RectTransform> _playAreas = new Dictionary<int, RectTransform>();
         private readonly Dictionary<int, List<GameObject>> _playCards = new Dictionary<int, List<GameObject>>();
         private readonly Dictionary<int, List<Card>> _lastPlays = new Dictionary<int, List<Card>>();
-        private int _selectedIndex = -1;
+        private readonly HashSet<int> _selectedIndices = new HashSet<int>();
 
         private Text _centerTip;
         private Text _statusText;
@@ -238,13 +238,25 @@ namespace Doudizhu.UI
 
             if (_engine.Phase == GamePhase.Playing && _engine.CurrentPlayer != LocalPlayerIndex)
             {
-                _selectedIndex = -1;
+                _selectedIndices.Clear();
             }
 
             List<Card> hand = _engine.Players[LocalPlayerIndex].Hand;
-            if (_selectedIndex >= hand.Count)
+            if (_selectedIndices.Count > 0)
             {
-                _selectedIndex = -1;
+                List<int> invalid = new List<int>();
+                foreach (int index in _selectedIndices)
+                {
+                    if (index >= hand.Count)
+                    {
+                        invalid.Add(index);
+                    }
+                }
+
+                for (int i = 0; i < invalid.Count; i++)
+                {
+                    _selectedIndices.Remove(invalid[i]);
+                }
             }
 
             EnsureHandSlots(hand.Count);
@@ -258,7 +270,7 @@ namespace Doudizhu.UI
                     cardObj.SetActive(true);
                     RectTransform rect = cardObj.GetComponent<RectTransform>();
                     rect.sizeDelta = new Vector2(HandCardWidth, HandCardHeight);
-                    float y = 10f + (i == _selectedIndex ? 20f : 0f);
+                    float y = 10f + (_selectedIndices.Contains(i) ? 20f : 0f);
                     rect.anchoredPosition = new Vector2(startX + i * HandSpacing, y);
                     ApplyCardVisual(cardObj.transform, hand[i]);
 
@@ -451,7 +463,15 @@ namespace Doudizhu.UI
                 return;
             }
 
-            _selectedIndex = _selectedIndex == index ? -1 : index;
+            if (_selectedIndices.Contains(index))
+            {
+                _selectedIndices.Remove(index);
+            }
+            else
+            {
+                _selectedIndices.Add(index);
+            }
+
             UpdateHand();
         }
 
@@ -480,16 +500,17 @@ namespace Doudizhu.UI
 
             List<Card> hand = _engine.Players[LocalPlayerIndex].Hand;
             PlayAction action;
-            if (_selectedIndex >= 0 && _selectedIndex < hand.Count)
+            List<Card> selectedCards = GetSelectedCards(hand);
+            if (selectedCards.Count > 0)
             {
-                action = PlayAction.Single(hand[_selectedIndex]);
+                action = PlayAction.FromCards(selectedCards);
             }
             else
             {
                 action = _strategy.BuildAutoPlay(_engine.Players[LocalPlayerIndex], _engine.LastPlay);
             }
 
-            _selectedIndex = -1;
+            _selectedIndices.Clear();
             _strategy.SetPlay(action);
             StepAndRefresh();
         }
@@ -501,7 +522,7 @@ namespace Doudizhu.UI
                 return;
             }
 
-            _selectedIndex = -1;
+            _selectedIndices.Clear();
             _strategy.SetPlay(PlayAction.Pass());
             StepAndRefresh();
         }
@@ -514,13 +535,53 @@ namespace Doudizhu.UI
             }
 
             PlayAction action = _strategy.BuildAutoPlay(_engine.Players[LocalPlayerIndex], _engine.LastPlay);
-            if (action.Type == PlayType.Single && action.Cards.Count > 0)
+            if (action.Type != PlayType.Pass && action.Cards.Count > 0)
             {
-                List<Card> hand = _engine.Players[LocalPlayerIndex].Hand;
-                int index = hand.IndexOf(action.Cards[0]);
-                _selectedIndex = index;
-                UpdateHand();
+                ApplySelectionFromCards(_engine.Players[LocalPlayerIndex].Hand, action.Cards);
             }
+        }
+
+        private List<Card> GetSelectedCards(List<Card> hand)
+        {
+            List<int> indices = new List<int>(_selectedIndices);
+            indices.Sort();
+            List<Card> selected = new List<Card>();
+            for (int i = 0; i < indices.Count; i++)
+            {
+                int index = indices[i];
+                if (index >= 0 && index < hand.Count)
+                {
+                    selected.Add(hand[index]);
+                }
+            }
+
+            return selected;
+        }
+
+        private void ApplySelectionFromCards(List<Card> hand, List<Card> cards)
+        {
+            _selectedIndices.Clear();
+            bool[] used = new bool[hand.Count];
+            for (int i = 0; i < cards.Count; i++)
+            {
+                Card target = cards[i];
+                for (int j = 0; j < hand.Count; j++)
+                {
+                    if (used[j])
+                    {
+                        continue;
+                    }
+
+                    if (hand[j].Equals(target))
+                    {
+                        used[j] = true;
+                        _selectedIndices.Add(j);
+                        break;
+                    }
+                }
+            }
+
+            UpdateHand();
         }
 
         private sealed class PlayerPanelView

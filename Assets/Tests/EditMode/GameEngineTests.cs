@@ -71,5 +71,51 @@ namespace Doudizhu.Game.Tests
 
             Assert.IsTrue(engine.CurrentPlayer >= 0 && engine.CurrentPlayer < 3);
         }
+
+        [Test]
+        public void PlayRulesEvaluateAndCompare()
+        {
+            List<Card> pair = new List<Card>
+            {
+                new Card(CardSuit.Spade, CardRank.Four),
+                new Card(CardSuit.Heart, CardRank.Four)
+            };
+            List<Card> higherPair = new List<Card>
+            {
+                new Card(CardSuit.Spade, CardRank.Six),
+                new Card(CardSuit.Heart, CardRank.Six)
+            };
+            List<Card> straight = new List<Card>
+            {
+                new Card(CardSuit.Spade, CardRank.Three),
+                new Card(CardSuit.Heart, CardRank.Four),
+                new Card(CardSuit.Club, CardRank.Five),
+                new Card(CardSuit.Diamond, CardRank.Six),
+                new Card(CardSuit.Spade, CardRank.Seven)
+            };
+            List<Card> bomb = new List<Card>
+            {
+                new Card(CardSuit.Spade, CardRank.Nine),
+                new Card(CardSuit.Heart, CardRank.Nine),
+                new Card(CardSuit.Club, CardRank.Nine),
+                new Card(CardSuit.Diamond, CardRank.Nine)
+            };
+            List<Card> rocket = new List<Card>
+            {
+                new Card(CardSuit.Joker, CardRank.JokerSmall),
+                new Card(CardSuit.Joker, CardRank.JokerBig)
+            };
+
+            Assert.IsTrue(PlayRules.TryEvaluate(pair, out PlayPattern pairPattern));
+            Assert.IsTrue(PlayRules.TryEvaluate(higherPair, out PlayPattern higherPairPattern));
+            Assert.IsTrue(PlayRules.TryEvaluate(straight, out PlayPattern straightPattern));
+            Assert.IsTrue(PlayRules.TryEvaluate(bomb, out PlayPattern bombPattern));
+            Assert.IsTrue(PlayRules.TryEvaluate(rocket, out PlayPattern rocketPattern));
+
+            Assert.IsTrue(PlayRules.CanBeat(higherPairPattern, pairPattern));
+            Assert.IsFalse(PlayRules.CanBeat(pairPattern, higherPairPattern));
+            Assert.IsTrue(PlayRules.CanBeat(bombPattern, straightPattern));
+            Assert.IsTrue(PlayRules.CanBeat(rocketPattern, bombPattern));
+        }
     }
 }
