@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System;
 using Doudizhu.Game;
 using UnityEngine;
 using UnityEngine.UI;
@@ -40,12 +41,14 @@ namespace Doudizhu.UI
 
         private GameObject _actionBar;
         private GameObject _bidBar;
+        private readonly List<Button> _bidButtons = new List<Button>();
+        private readonly List<Text> _bidButtonLabels = new List<Text>();
 
         private Button _playButton;
         private Button _passButton;
         private Button _hintButton;
-        private float _nextAiPlayTime;
-        private int _lastObservedPlayer = -1;
+        private Button _restartButton;
+        private float _nextTurnTime;
 
         private const float AiPlayDelay = 1f;
 
@@ -62,7 +65,7 @@ namespace Doudizhu.UI
             WireActionButtons();
 
             _strategy = new UiInputStrategy(LocalPlayerIndex, new AutoGameStrategy());
-            _engine = new GameEngine(_strategy, 20260123);
+            _engine = CreateEngine();
 
             RefreshAll();
         }
@@ -72,15 +75,6 @@ namespace Doudizhu.UI
             if (_engine == null || _engine.Phase == GamePhase.Finished)
             {
                 return;
-            }
-
-            if (_engine.CurrentPlayer != _lastObservedPlayer)
-            {
-                _lastObservedPlayer = _engine.CurrentPlayer;
-                if (_engine.Phase == GamePhase.Playing && _engine.CurrentPlayer != LocalPlayerIndex)
-                {
-                    _nextAiPlayTime = Time.time + AiPlayDelay;
-                }
             }
 
             if (_engine.Phase == GamePhase.Bidding)
@@ -96,11 +90,11 @@ namespace Doudizhu.UI
                 {
                     return;
                 }
+            }
 
-                if (_engine.CurrentPlayer != LocalPlayerIndex && Time.time < _nextAiPlayTime)
-                {
-                    return;
-                }
+            if (_engine.Phase == GamePhase.Playing && Time.time < _nextTurnTime)
+            {
+                return;
             }
 
             StepAndRefresh();
@@ -113,6 +107,10 @@ namespace Doudizhu.UI
             _tableArea = root.Find("TableArea");
             _bottomArea = root.Find("BottomCards");
             _actionBar = root.Find("ActionBar")?.gameObject;
+            if (_actionBar == null && _tableArea != null)
+            {
+                _actionBar = _tableArea.Find("ActionBar")?.gameObject;
+            }
             _centerTip = root.Find("TableArea/CenterTip")?.GetComponent<Text>();
             _statusText = root.Find("TopBar/Status")?.GetComponent<Text>();
 
@@ -127,6 +125,19 @@ namespace Doudizhu.UI
                 _hintButton = _actionBar.transform.Find("ActionButton_提示")?.GetComponent<Button>();
             }
 
+            if (_actionBar != null && _tableArea != null && _actionBar.transform.parent != _tableArea)
+            {
+                RectTransform rect = _actionBar.GetComponent<RectTransform>();
+                rect.SetParent(_tableArea, false);
+                rect.anchorMin = new Vector2(0.5f, 0.5f);
+                rect.anchorMax = new Vector2(0.5f, 0.5f);
+                rect.pivot = new Vector2(0.5f, 0.5f);
+                rect.sizeDelta = new Vector2(360f, 70f);
+                rect.anchoredPosition = new Vector2(0f, -120f);
+            }
+
+            _restartButton = root.Find("TableArea/RestartButton")?.GetComponent<Button>();
+
             CacheBottomCards();
         }
 
@@ -139,35 +150,35 @@ namespace Doudizhu.UI
 
             _bidBar = new GameObject("BidBar", typeof(RectTransform));
             RectTransform rect = _bidBar.GetComponent<RectTransform>();
-            rect.SetParent(transform, false);
-            rect.anchorMin = new Vector2(0.5f, 0f);
-            rect.anchorMax = new Vector2(0.5f, 0f);
-            rect.pivot = new Vector2(0.5f, 0f);
-            rect.sizeDelta = new Vector2(460f, 70f);
-            rect.anchoredPosition = new Vector2(0f, 40f);
+            rect.SetParent(_tableArea != null ? _tableArea : transform, false);
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = new Vector2(240f, 60f);
+            rect.anchoredPosition = new Vector2(0f, -70f);
 
-            string[] labels = { "不叫", "叫1", "叫2", "叫3" };
-            int[] bids = { 0, 1, 2, 3 };
-            float startX = -(labels.Length - 1) * 70f * 0.5f;
-
-            for (int i = 0; i < labels.Length; i++)
+            _bidButtons.Clear();
+            _bidButtonLabels.Clear();
+            float[] xOffsets = { -60f, 60f };
+            for (int i = 0; i < 2; i++)
             {
                 GameObject buttonObj = Instantiate(refs.ActionButtonPrefab, _bidBar.transform);
-                buttonObj.name = $"BidButton_{labels[i]}";
+                buttonObj.name = $"BidButton_{i}";
                 buttonObj.SetActive(true);
                 RectTransform btnRect = buttonObj.GetComponent<RectTransform>();
                 btnRect.sizeDelta = new Vector2(90f, 36f);
-                btnRect.anchoredPosition = new Vector2(startX + i * 70f, 0f);
+                btnRect.anchoredPosition = new Vector2(xOffsets[i], 0f);
 
                 Text text = buttonObj.GetComponentInChildren<Text>();
                 if (text != null)
                 {
-                    text.text = labels[i];
+                    _bidButtonLabels.Add(text);
                 }
 
                 Button button = buttonObj.GetComponent<Button>();
-                int bidValue = bids[i];
+                int bidValue = i == 0 ? 0 : 1;
                 button.onClick.AddListener(() => OnBidClicked(bidValue));
+                _bidButtons.Add(button);
             }
         }
 
@@ -176,6 +187,7 @@ namespace Doudizhu.UI
             _playButton?.onClick.AddListener(OnPlayClicked);
             _passButton?.onClick.AddListener(OnPassClicked);
             _hintButton?.onClick.AddListener(OnHintClicked);
+            _restartButton?.onClick.AddListener(OnRestartClicked);
         }
 
         private void StepAndRefresh()
@@ -183,16 +195,23 @@ namespace Doudizhu.UI
             StepResult result = _engine.Step();
             if (result.Kind == StepKind.Bid && result.BidScore > 0)
             {
-                _statusText.text = $"叫分：{result.BidScore}  |  玩家 {result.PlayerIndex + 1}";
+                string bidLabel = _engine.BidStage == BidStage.Rob ? "抢地主" : "叫地主";
+                _statusText.text = $"{bidLabel}  |  玩家 {result.PlayerIndex + 1}";
             }
 
             RecordPlay(result);
             RefreshAll();
+
+            if (_engine.Phase == GamePhase.Playing)
+            {
+                _nextTurnTime = Time.time + AiPlayDelay;
+            }
         }
 
         private void RefreshAll()
         {
             UpdatePhaseUi();
+            UpdateBidBarVisuals();
             UpdatePlayerPanels();
             UpdateHand();
             UpdateTableCards();
@@ -208,22 +227,25 @@ namespace Doudizhu.UI
 
             if (_engine.Phase == GamePhase.Bidding)
             {
-                _centerTip.text = "叫分阶段";
+                _centerTip.text = _engine.BidStage == BidStage.Rob ? "抢地主阶段" : "叫地主阶段";
                 ClearAllTablePlays();
                 SetActionBarActive(false);
-                SetBidBarActive(true);
+                SetBidBarActive(_engine.CurrentPlayer == LocalPlayerIndex);
+                SetRestartButtonActive(false);
             }
             else if (_engine.Phase == GamePhase.Playing)
             {
                 _centerTip.text = "等待出牌";
-                SetActionBarActive(true);
+                SetActionBarActive(_engine.CurrentPlayer == LocalPlayerIndex);
                 SetBidBarActive(false);
+                SetRestartButtonActive(false);
             }
             else
             {
                 _centerTip.text = "本局结束";
                 SetActionBarActive(false);
                 SetBidBarActive(false);
+                SetRestartButtonActive(true);
             }
         }
 
@@ -240,6 +262,33 @@ namespace Doudizhu.UI
             if (_bidBar != null)
             {
                 _bidBar.SetActive(active);
+            }
+        }
+
+        private void SetRestartButtonActive(bool active)
+        {
+            if (_restartButton != null)
+            {
+                _restartButton.gameObject.SetActive(active);
+            }
+        }
+
+        private void UpdateBidBarVisuals()
+        {
+            if (_bidButtonLabels.Count < 2 || _engine == null)
+            {
+                return;
+            }
+
+            if (_engine.BidStage == BidStage.Rob)
+            {
+                _bidButtonLabels[0].text = "不抢";
+                _bidButtonLabels[1].text = "抢地主";
+            }
+            else
+            {
+                _bidButtonLabels[0].text = "不叫";
+                _bidButtonLabels[1].text = "叫地主";
             }
         }
 
@@ -348,6 +397,11 @@ namespace Doudizhu.UI
 
         private void RecordPlay(StepResult result)
         {
+            if (result.Kind == StepKind.Play || result.Kind == StepKind.Pass)
+            {
+                ClearPlayerTable(result.PlayerIndex);
+            }
+
             if (result.Kind == StepKind.Play && result.Play.Cards.Count > 0)
             {
                 _lastPlays[result.PlayerIndex] = new List<Card>(result.Play.Cards);
@@ -356,11 +410,6 @@ namespace Doudizhu.UI
             else if (result.Kind == StepKind.Pass)
             {
                 SetPassLabelActive(result.PlayerIndex, true);
-            }
-
-            if (_engine.LastPlay == null)
-            {
-                ClearAllTablePlays();
             }
         }
 
@@ -376,6 +425,17 @@ namespace Doudizhu.UI
             {
                 SetPassLabelActive(key, false);
             }
+        }
+
+        private void ClearPlayerTable(int playerIndex)
+        {
+            _lastPlays.Remove(playerIndex);
+            if (_playCards.TryGetValue(playerIndex, out List<GameObject> slots))
+            {
+                SetPlayCardsActive(slots, false);
+            }
+
+            SetPassLabelActive(playerIndex, false);
         }
 
         private void UpdateTableCards()
@@ -510,6 +570,8 @@ namespace Doudizhu.UI
             if (suit != null)
             {
                 suit.color = Color.white;
+                RectTransform suitRect = suit.GetComponent<RectTransform>();
+                suitRect.anchoredPosition = new Vector2(10f, -34f);
             }
 
             if (center != null)
@@ -611,6 +673,11 @@ namespace Doudizhu.UI
             }
         }
 
+        private void OnRestartClicked()
+        {
+            StartNewGame();
+        }
+
         private List<Card> GetSelectedCards(List<Card> hand)
         {
             List<int> indices = new List<int>(_selectedIndices);
@@ -652,6 +719,22 @@ namespace Doudizhu.UI
             }
 
             UpdateHand();
+        }
+
+        private GameEngine CreateEngine()
+        {
+            int seed = unchecked((int)System.DateTime.UtcNow.Ticks);
+            return new GameEngine(_strategy, seed);
+        }
+
+        private void StartNewGame()
+        {
+            _strategy = new UiInputStrategy(LocalPlayerIndex, new AutoGameStrategy());
+            _engine = CreateEngine();
+            _selectedIndices.Clear();
+            _nextTurnTime = Time.time;
+            ClearAllTablePlays();
+            RefreshAll();
         }
 
         private void UpdateBottomCards()

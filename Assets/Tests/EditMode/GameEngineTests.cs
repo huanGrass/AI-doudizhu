@@ -132,5 +132,52 @@ namespace Doudizhu.Game.Tests
             Assert.AreEqual(PlayType.Pair, action.Type);
             Assert.AreEqual(2, action.Cards.Count);
         }
+
+        [Test]
+        public void CallThenRobSelectsLastRobberAsLandlord()
+        {
+            Queue<int> bids = new Queue<int>(new[] { 1, 0, 0, 1, 0 });
+            GameEngine engine = new GameEngine(new ScriptedBidStrategy(bids), 3);
+
+            int safety = 0;
+            while (engine.Phase == GamePhase.Bidding)
+            {
+                engine.Step();
+                safety++;
+                if (safety > 10)
+                {
+                    Assert.Fail("Bidding did not finish quickly.");
+                }
+            }
+
+            Assert.AreEqual(GamePhase.Playing, engine.Phase);
+            Assert.AreEqual(1, engine.LandlordIndex);
+            Assert.AreEqual(20, engine.Players[engine.LandlordIndex].Hand.Count);
+        }
+
+        private sealed class ScriptedBidStrategy : IGameStrategy
+        {
+            private readonly Queue<int> _bids;
+
+            public ScriptedBidStrategy(Queue<int> bids)
+            {
+                _bids = bids;
+            }
+
+            public int ChooseBid(PlayerState player, int currentHigh)
+            {
+                if (_bids.Count == 0)
+                {
+                    return 0;
+                }
+
+                return _bids.Dequeue();
+            }
+
+            public PlayAction ChoosePlay(PlayerState player, PlayAction? lastPlay)
+            {
+                return PlayAction.Pass();
+            }
+        }
     }
 }

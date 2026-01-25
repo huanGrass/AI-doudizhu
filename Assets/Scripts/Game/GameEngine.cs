@@ -19,6 +19,9 @@ namespace Doudizhu.Game
         private int _bidHighScore;
         private int _bidHighPlayer;
         private int _bidsMade;
+        private BidStage _bidStage;
+        private int _callPlayer;
+        private int _robCount;
         private int _redealCount;
         private List<Card> _bottomCards = new List<Card>(3);
 
@@ -36,6 +39,7 @@ namespace Doudizhu.Game
         public int LandlordIndex => _bidHighPlayer;
         public PlayAction? LastPlay => _lastPlay;
         public IReadOnlyList<Card> BottomCards => _bottomCards;
+        public BidStage BidStage => _bidStage;
 
         private void Setup()
         {
@@ -70,6 +74,9 @@ namespace Doudizhu.Game
             _bidsMade = 0;
             _bidHighScore = 0;
             _bidHighPlayer = -1;
+            _bidStage = BidStage.Call;
+            _callPlayer = -1;
+            _robCount = 0;
             _lastPlay = null;
             _lastPlayer = -1;
             _passCount = 0;
@@ -85,37 +92,58 @@ namespace Doudizhu.Game
             if (_phase == GamePhase.Bidding)
             {
                 PlayerState player = _players[_currentPlayer];
-                int bid = _strategy.ChooseBid(player, _bidHighScore);
-                bid = Math.Clamp(bid, 0, 3);
+                int currentHigh = _bidStage == BidStage.Call ? (_callPlayer >= 0 ? 1 : 0) : (_robCount > 0 ? 1 : 0);
+                int bid = _strategy.ChooseBid(player, currentHigh);
+                bid = Math.Clamp(bid, 0, 1);
 
-                if (bid > _bidHighScore)
+                StepResult result = new StepResult(GamePhase.Bidding, StepKind.Bid, _currentPlayer, bid, PlayAction.Pass(), -1);
+                if (_bidStage == BidStage.Call)
                 {
-                    _bidHighScore = bid;
-                    _bidHighPlayer = _currentPlayer;
+                    _bidsMade++;
+                    if (bid > 0 && _callPlayer < 0)
+                    {
+                        _callPlayer = _currentPlayer;
+                        _bidHighPlayer = _currentPlayer;
+                    }
+
+                    if (_bidsMade >= 3)
+                    {
+                        if (_callPlayer < 0)
+                        {
+                            _redealCount++;
+                            if (_redealCount > _maxRedeal)
+                            {
+                                _bidHighPlayer = 0;
+                                EnterPlaying();
+                                return new StepResult(GamePhase.Playing, StepKind.Redeal, _bidHighPlayer, 1, PlayAction.Pass(), -1);
+                            }
+
+                            Redeal();
+                            return new StepResult(GamePhase.Bidding, StepKind.Redeal, -1, 0, PlayAction.Pass(), -1);
+                        }
+
+                        _bidStage = BidStage.Rob;
+                        _bidsMade = 0;
+                        _robCount = 0;
+                        _currentPlayer = (_callPlayer + 1) % _players.Count;
+                        return result;
+                    }
+
+                    _currentPlayer = (_currentPlayer + 1) % _players.Count;
+                    return result;
                 }
 
                 _bidsMade++;
-                StepResult result = new StepResult(GamePhase.Bidding, StepKind.Bid, _currentPlayer, bid, PlayAction.Pass(), -1);
-
-                if (_bidsMade >= 3)
+                if (bid > 0)
                 {
-                    if (_bidHighScore == 0)
-                    {
-                        _redealCount++;
-                        if (_redealCount > _maxRedeal)
-                        {
-                            _bidHighPlayer = 0;
-                            _bidHighScore = 1;
-                            EnterPlaying();
-                            return new StepResult(GamePhase.Playing, StepKind.Redeal, _bidHighPlayer, _bidHighScore, PlayAction.Pass(), -1);
-                        }
+                    _bidHighPlayer = _currentPlayer;
+                    _robCount++;
+                }
 
-                        Redeal();
-                        return new StepResult(GamePhase.Bidding, StepKind.Redeal, -1, 0, PlayAction.Pass(), -1);
-                    }
-
+                if (_bidsMade >= 2)
+                {
                     EnterPlaying();
-                    return new StepResult(GamePhase.Playing, StepKind.Bid, _bidHighPlayer, _bidHighScore, PlayAction.Pass(), -1);
+                    return new StepResult(GamePhase.Playing, StepKind.Bid, _bidHighPlayer, 1, PlayAction.Pass(), -1);
                 }
 
                 _currentPlayer = (_currentPlayer + 1) % _players.Count;
@@ -243,6 +271,12 @@ namespace Doudizhu.Game
         Bidding,
         Playing,
         Finished
+    }
+
+    public enum BidStage
+    {
+        Call,
+        Rob
     }
 
     public enum StepKind

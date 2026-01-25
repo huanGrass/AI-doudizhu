@@ -1,4 +1,5 @@
 ﻿using Doudizhu.UI;
+using System;
 using UnityEngine;
 
 namespace Doudizhu.Game
@@ -12,7 +13,8 @@ namespace Doudizhu.Game
 
         private static void RunSimulation()
         {
-            GameEngine engine = new GameEngine(new AutoGameStrategy(), 20260123);
+            int seed = unchecked((int)System.DateTime.UtcNow.Ticks);
+            GameEngine engine = new GameEngine(new AutoGameStrategy(), seed);
             int safety = 0;
 
             while (engine.Phase != GamePhase.Finished)

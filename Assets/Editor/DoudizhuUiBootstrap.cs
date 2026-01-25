@@ -101,11 +101,12 @@ namespace Doudizhu.EditorTools
             GameObject uiRoot = CreateCanvasRoot();
             CreateBackground(uiRoot.transform, background);
             CreateTopBar(uiRoot.transform, font, joker);
-            CreateTableArea(uiRoot.transform, font);
+            GameObject tableArea = CreateTableArea(uiRoot.transform, font);
             CreateBottomCards(uiRoot.transform, cardBackPrefab);
             CreatePlayerPanels(uiRoot.transform, playerPanelPrefab, font, smallKing, bigKing, joker);
             CreateHandArea(uiRoot.transform, font, cardFacePrefab, rankSprites, suitSpade, suitHeart, suitClub, suitDiamond, joker, smallKing, bigKing);
-            CreateActionBar(uiRoot.transform, actionButtonPrefab, font);
+            CreateActionBar(tableArea.transform, actionButtonPrefab, font);
+            CreateRestartButton(tableArea.transform, actionButtonPrefab, font);
             AttachUiRefs(uiRoot, cardFacePrefab, cardBackPrefab, actionButtonPrefab, background, cardBack, joker, smallKing, bigKing, suitSpade, suitHeart, suitClub, suitDiamond, rankSprites);
             uiRoot.AddComponent<DoudizhuUiController>();
             EnsureBatchScreenshotProvider();
@@ -208,6 +209,8 @@ namespace Doudizhu.EditorTools
             GameObject bg = CreateImage("Background", parent, sprite, Color.white);
             RectTransform rect = bg.GetComponent<RectTransform>();
             SetRect(rect, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            Image image = bg.GetComponent<Image>();
+            image.preserveAspect = false;
         }
 
         private static void CreateTopBar(Transform parent, Font font, Sprite joker)
@@ -229,7 +232,7 @@ namespace Doudizhu.EditorTools
             SetRect(iconRect, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(28f, 28f), new Vector2(-250f, 0f));
         }
 
-        private static void CreateTableArea(Transform parent, Font font)
+        private static GameObject CreateTableArea(Transform parent, Font font)
         {
             GameObject table = CreatePanel("TableArea", parent, new Color(0.96f, 0.86f, 0.68f, 0.9f));
             RectTransform rect = table.GetComponent<RectTransform>();
@@ -238,6 +241,8 @@ namespace Doudizhu.EditorTools
             Text tip = CreateText("CenterTip", table.transform, "等待出牌", font, 20, TextAnchor.MiddleCenter, new Color(0.35f, 0.25f, 0.1f, 1f));
             RectTransform tipRect = tip.GetComponent<RectTransform>();
             SetRect(tipRect, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(200f, 40f), new Vector2(0f, -18f));
+
+            return table;
         }
 
         private static void CreateBottomCards(Transform parent, GameObject cardBackPrefab)
@@ -332,7 +337,7 @@ namespace Doudizhu.EditorTools
             GameObject bar = new GameObject("ActionBar", typeof(RectTransform));
             bar.transform.SetParent(parent, false);
             RectTransform rect = bar.GetComponent<RectTransform>();
-            SetRect(rect, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(360f, 70f), new Vector2(0f, 40f));
+            SetRect(rect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(360f, 70f), new Vector2(0f, -120f));
 
             string[] labels = { "出牌", "不出", "提示" };
             Color[] colors =
@@ -354,6 +359,18 @@ namespace Doudizhu.EditorTools
                 Image image = button.GetComponent<Image>();
                 image.color = colors[i];
             }
+        }
+
+        private static void CreateRestartButton(Transform parent, GameObject buttonPrefab, Font font)
+        {
+            GameObject button = InstantiatePrefab(buttonPrefab, parent);
+            button.name = "RestartButton";
+            button.SetActive(false);
+            RectTransform rect = button.GetComponent<RectTransform>();
+            SetRect(rect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(120f, 40f), new Vector2(0f, -40f));
+            Text text = button.GetComponentInChildren<Text>();
+            text.text = "再来一局";
+            text.font = font;
         }
 
         private static void AttachUiRefs(
