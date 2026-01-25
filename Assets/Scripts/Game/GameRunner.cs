@@ -1,5 +1,4 @@
 ﻿using Doudizhu.UI;
-using System;
 using UnityEngine;
 
 namespace Doudizhu.Game

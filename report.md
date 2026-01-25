@@ -1,6 +1,6 @@
 ﻿# One Click Execution Report
 
-时间：2026-01-25 17:52:42
+时间：2026-01-25 22:43:04
 工程路径：E:\workProject\unityProject\doudizhu
 镜像路径：E:\workProject\unityProject\doudizhu_mirror
 执行脚本：ci/one_click_check.bat
@@ -16,21 +16,21 @@
 - 当前分支：master
 - 本轮提交数：UNKNOWN
 - 提交记录：
+  - 42298cd 调整叫地主流程与UI布局
   - 7ea359b 修复牌面显示与出牌流程
   - 104fb1d 同步资源元信息与报告
   - a2a1f43 移除测试UI评审与截图流程
   - 6a95100 完善出牌规则与UI显示
-  - e4767f4 更新AGENTS流程约束
 - 是否已同步镜像：YES
 
 ## 测试执行情况
 
 ### PlayMode Tests
-- 是否执行：YES
+- 是否执行：NO
 - 命令：ci/run_playmode_tests.bat
 - 结果文件：Logs/playmode-results.xml
-- 用例数：6
-- 失败数：0
+- 用例数：UNKNOWN
+- 失败数：UNKNOWN
 
 ### EditMode Tests
 - 是否执行：NO
