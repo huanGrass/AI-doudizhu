@@ -1,6 +1,6 @@
 ﻿# One Click Execution Report
 
-时间：2026-01-26 03:44:21
+时间：2026-01-26 06:42:49
 工程路径：E:\workProject\unityProject\doudizhu
 镜像路径：E:\workProject\unityProject\doudizhu_mirror
 执行脚本：ci/one_click_check.bat
@@ -16,11 +16,11 @@
 - 当前分支：master
 - 本轮提交数：UNKNOWN
 - 提交记录：
+  - edb2d4f 新增演示封面图
+  - fc0d294 更新一键检查报告
   - fdc6d59 补充音频meta与检查报告
   - f8c3094 添加背景音乐与角色语音播报
   - a990915 下移手牌区域避免遮挡按钮
-  - 0da107c 更新一键检查报告
-  - 31bbf9e 修正运行时随机种子冲突
 - 是否已同步镜像：YES
 
 ## 测试执行情况
