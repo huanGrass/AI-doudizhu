@@ -1,6 +1,6 @@
 ﻿# One Click Execution Report
 
-时间：2026-01-26 06:46:44
+时间：2026-01-26 06:47:56
 工程路径：E:\workProject\unityProject\doudizhu
 镜像路径：E:\workProject\unityProject\doudizhu_mirror
 执行脚本：ci/one_click_check.bat
@@ -16,11 +16,11 @@
 - 当前分支：master
 - 本轮提交数：UNKNOWN
 - 提交记录：
+  - 45fed0d 移除封面中的牌底
+  - 484a707 更新一键检查报告
   - 24b63eb 移除封面中的Joker
   - 8367c9c 更新一键检查报告
   - edb2d4f 新增演示封面图
-  - fc0d294 更新一键检查报告
-  - fdc6d59 补充音频meta与检查报告
 - 是否已同步镜像：YES
 
 ## 测试执行情况
