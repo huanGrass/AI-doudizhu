@@ -858,6 +858,7 @@ namespace Doudizhu.UI
             private readonly Text _name;
             private readonly Text _coin;
             private readonly Text _role;
+            private readonly Text _cardCount;
 
             public PlayerPanelView(Transform root)
             {
@@ -865,6 +866,19 @@ namespace Doudizhu.UI
                 _name = root?.Find("NameText")?.GetComponent<Text>();
                 _coin = root?.Find("CoinText")?.GetComponent<Text>();
                 _role = root?.Find("RoleText")?.GetComponent<Text>();
+
+                Text cardCount = root?.Find("CardCountText")?.GetComponent<Text>();
+                if (cardCount == null && root != null)
+                {
+                    Font font = _role != null
+                        ? _role.font
+                        : (_coin != null
+                            ? _coin.font
+                            : (_name != null ? _name.font : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf")));
+                    cardCount = CreateCardCountText(root, font);
+                }
+
+                _cardCount = cardCount;
             }
 
             public void Apply(PlayerState player, string displayName, string coin)
@@ -877,6 +891,29 @@ namespace Doudizhu.UI
                 if (_name != null) _name.text = displayName;
                 if (_coin != null) _coin.text = coin;
                 if (_role != null) _role.text = player.Role == PlayerRole.Landlord ? "地主" : "农民";
+                if (_cardCount != null) _cardCount.text = $"剩余手牌: {player.Hand.Count}";
+            }
+
+            private static Text CreateCardCountText(Transform root, Font font)
+            {
+                GameObject obj = new GameObject("CardCountText", typeof(RectTransform), typeof(Text));
+                obj.transform.SetParent(root, false);
+
+                Text text = obj.GetComponent<Text>();
+                text.font = font;
+                text.fontSize = 15;
+                text.alignment = TextAnchor.UpperLeft;
+                text.color = new Color(0.9f, 0.95f, 1f, 1f);
+                text.text = "剩余手牌: 17";
+
+                RectTransform rect = obj.GetComponent<RectTransform>();
+                rect.anchorMin = new Vector2(0f, 1f);
+                rect.anchorMax = new Vector2(1f, 1f);
+                rect.pivot = new Vector2(0f, 1f);
+                rect.sizeDelta = new Vector2(-90f, 24f);
+                rect.anchoredPosition = new Vector2(96f, -90f);
+
+                return text;
             }
         }
     }
