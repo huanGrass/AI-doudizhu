@@ -203,6 +203,11 @@ namespace Doudizhu.UI
             }
 
             RecordPlay(result);
+            if (_engine.Phase == GamePhase.Playing)
+            {
+                ClearPlayerTable(_engine.CurrentPlayer);
+            }
+
             DoudizhuAudioManager.Instance?.PlayStep(result, bidStageBefore, lastPlayBefore);
             RefreshAll();
 
@@ -446,12 +451,6 @@ namespace Doudizhu.UI
         {
             if (_tableArea == null || refs == null)
             {
-                return;
-            }
-
-            if (_engine != null && _engine.Phase == GamePhase.Playing && _engine.LastPlay == null)
-            {
-                ClearAllTablePlays();
                 return;
             }
 
