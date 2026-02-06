@@ -21,6 +21,7 @@ namespace Doudizhu.Game
         private int _bidsMade;
         private BidStage _bidStage;
         private int _callPlayer;
+        private int _callCount;
         private int _robCount;
         private int _redealCount;
         private List<Card> _bottomCards = new List<Card>(3);
@@ -76,6 +77,7 @@ namespace Doudizhu.Game
             _bidHighPlayer = -1;
             _bidStage = BidStage.Call;
             _callPlayer = -1;
+            _callCount = 0;
             _robCount = 0;
             _lastPlay = null;
             _lastPlayer = -1;
@@ -105,6 +107,10 @@ namespace Doudizhu.Game
                         _callPlayer = _currentPlayer;
                         _bidHighPlayer = _currentPlayer;
                     }
+                    if (bid > 0)
+                    {
+                        _callCount++;
+                    }
 
                     if (_bidsMade >= 3)
                     {
@@ -120,6 +126,14 @@ namespace Doudizhu.Game
 
                             Redeal();
                             return new StepResult(GamePhase.Bidding, StepKind.Redeal, -1, 0, PlayAction.Pass(), -1);
+                        }
+
+                        // Only one player called landlord: lock immediately, no rob stage.
+                        if (_callCount == 1)
+                        {
+                            _bidHighPlayer = _callPlayer;
+                            EnterPlaying();
+                            return new StepResult(GamePhase.Playing, StepKind.Bid, _callPlayer, 1, PlayAction.Pass(), -1);
                         }
 
                         _bidStage = BidStage.Rob;
