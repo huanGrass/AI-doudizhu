@@ -133,7 +133,7 @@ namespace Doudizhu.Game
                         {
                             _bidHighPlayer = _callPlayer;
                             EnterPlaying();
-                            return new StepResult(GamePhase.Playing, StepKind.Bid, _currentPlayer, bid, PlayAction.Pass(), -1);
+                            return new StepResult(GamePhase.Playing, StepKind.Bid, result.PlayerIndex, result.BidScore, PlayAction.Pass(), -1);
                         }
 
                         _bidStage = BidStage.Rob;
