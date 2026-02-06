@@ -449,6 +449,12 @@ namespace Doudizhu.UI
                 return;
             }
 
+            if (_engine != null && _engine.Phase == GamePhase.Playing && _engine.LastPlay == null)
+            {
+                ClearAllTablePlays();
+                return;
+            }
+
             foreach (KeyValuePair<int, RectTransform> area in _playAreas)
             {
                 int playerIndex = area.Key;
