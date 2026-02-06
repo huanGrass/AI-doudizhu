@@ -128,15 +128,19 @@ namespace Doudizhu.UI
                 _hintButton = _actionBar.transform.Find("ActionButton_ÌבÊ¾")?.GetComponent<Button>();
             }
 
-            if (_actionBar != null && _tableArea != null && _actionBar.transform.parent != _tableArea)
+            if (_actionBar != null && _tableArea != null)
             {
                 RectTransform rect = _actionBar.GetComponent<RectTransform>();
-                rect.SetParent(_tableArea, false);
+                if (_actionBar.transform.parent != _tableArea)
+                {
+                    rect.SetParent(_tableArea, false);
+                }
+
                 rect.anchorMin = new Vector2(0.5f, 0.5f);
                 rect.anchorMax = new Vector2(0.5f, 0.5f);
                 rect.pivot = new Vector2(0.5f, 0.5f);
                 rect.sizeDelta = new Vector2(360f, 70f);
-                rect.anchoredPosition = new Vector2(0f, -120f);
+                rect.anchoredPosition = new Vector2(0f, -95f);
             }
 
             _restartButton = root.Find("TableArea/RestartButton")?.GetComponent<Button>();
