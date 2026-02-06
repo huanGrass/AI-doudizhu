@@ -32,6 +32,7 @@ namespace Doudizhu.UI
         private readonly Dictionary<int, List<GameObject>> _playCards = new Dictionary<int, List<GameObject>>();
         private readonly Dictionary<int, List<Card>> _lastPlays = new Dictionary<int, List<Card>>();
         private readonly Dictionary<int, Text> _passLabels = new Dictionary<int, Text>();
+        private readonly Dictionary<int, Text> _bidLabels = new Dictionary<int, Text>();
         private readonly HashSet<int> _selectedIndices = new HashSet<int>();
 
         private Text _centerTip;
@@ -52,7 +53,7 @@ namespace Doudizhu.UI
         private float _nextTurnTime;
 
         private const float AiPlayDelay = 1f;
-        private const float AiBidDelay = 0.6f;
+        private const float AiBidDelay = 1f;
 
         private void Awake()
         {
@@ -203,6 +204,7 @@ namespace Doudizhu.UI
                 _statusText.text = $"{bidLabel}  |  玩家 {result.PlayerIndex + 1}";
             }
 
+            RecordBid(result, bidStageBefore);
             RecordPlay(result);
             if (_engine.Phase == GamePhase.Playing)
             {
@@ -250,6 +252,7 @@ namespace Doudizhu.UI
             else if (_engine.Phase == GamePhase.Playing)
             {
                 _centerTip.text = "等待出牌";
+                ClearAllBidLabels();
                 SetActionBarActive(_engine.CurrentPlayer == LocalPlayerIndex);
                 SetBidBarActive(false);
                 SetRestartButtonActive(false);
@@ -257,6 +260,7 @@ namespace Doudizhu.UI
             else
             {
                 _centerTip.text = "本局结束";
+                ClearAllBidLabels();
                 SetActionBarActive(false);
                 SetBidBarActive(false);
                 SetRestartButtonActive(true);
@@ -393,6 +397,7 @@ namespace Doudizhu.UI
             foreach (KeyValuePair<int, RectTransform> entry in _playAreas)
             {
                 _passLabels[entry.Key] = CreatePassLabel(entry.Value);
+                _bidLabels[entry.Key] = CreateBidLabel(entry.Value);
             }
         }
 
@@ -409,6 +414,31 @@ namespace Doudizhu.UI
             return rect;
         }
 
+        private void RecordBid(StepResult result, BidStage bidStageBefore)
+        {
+            if (result.Kind != StepKind.Bid)
+            {
+                return;
+            }
+
+            if (result.PlayerIndex < 0)
+            {
+                ClearAllBidLabels();
+                return;
+            }
+
+            string label;
+            if (bidStageBefore == BidStage.Rob)
+            {
+                label = result.BidScore > 0 ? "抢地主" : "不抢";
+            }
+            else
+            {
+                label = result.BidScore > 0 ? "叫地主" : "不叫";
+            }
+
+            SetBidLabel(result.PlayerIndex, label, true);
+        }
         private void RecordPlay(StepResult result)
         {
             if (result.Kind == StepKind.Play || result.Kind == StepKind.Pass)
@@ -748,6 +778,7 @@ namespace Doudizhu.UI
             _selectedIndices.Clear();
             _nextTurnTime = Time.time;
             ClearAllTablePlays();
+            ClearAllBidLabels();
             RefreshAll();
         }
 
@@ -814,6 +845,25 @@ namespace Doudizhu.UI
             }
         }
 
+        private Text CreateBidLabel(RectTransform parent)
+        {
+            GameObject obj = new GameObject("BidText", typeof(RectTransform), typeof(Text));
+            obj.transform.SetParent(parent, false);
+            Text text = obj.GetComponent<Text>();
+            text.text = "叫地主";
+            text.fontSize = 20;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.color = new Color(0.95f, 0.92f, 0.6f, 1f);
+            text.font = _centerTip != null ? _centerTip.font : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            RectTransform rect = obj.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = new Vector2(130f, 40f);
+            rect.anchoredPosition = new Vector2(0f, 30f);
+            obj.SetActive(false);
+            return text;
+        }
         private Text CreatePassLabel(RectTransform parent)
         {
             GameObject obj = new GameObject("PassText", typeof(RectTransform), typeof(Text));
@@ -834,6 +884,25 @@ namespace Doudizhu.UI
             return text;
         }
 
+        private void SetBidLabel(int playerIndex, string content, bool active)
+        {
+            if (_bidLabels.TryGetValue(playerIndex, out Text label))
+            {
+                label.text = content;
+                label.gameObject.SetActive(active);
+            }
+        }
+
+        private void ClearAllBidLabels()
+        {
+            foreach (Text label in _bidLabels.Values)
+            {
+                if (label != null)
+                {
+                    label.gameObject.SetActive(false);
+                }
+            }
+        }
         private void SetPassLabelActive(int playerIndex, bool active)
         {
             if (_passLabels.TryGetValue(playerIndex, out Text label))
