@@ -52,6 +52,7 @@ namespace Doudizhu.UI
         private float _nextTurnTime;
 
         private const float AiPlayDelay = 1f;
+        private const float AiBidDelay = 0.6f;
 
         private void Awake()
         {
@@ -93,7 +94,7 @@ namespace Doudizhu.UI
                 }
             }
 
-            if (_engine.Phase == GamePhase.Playing && Time.time < _nextTurnTime)
+            if (Time.time < _nextTurnTime)
             {
                 return;
             }
@@ -214,6 +215,10 @@ namespace Doudizhu.UI
             if (_engine.Phase == GamePhase.Playing)
             {
                 _nextTurnTime = Time.time + AiPlayDelay;
+            }
+            else if (_engine.Phase == GamePhase.Bidding && _engine.CurrentPlayer != LocalPlayerIndex)
+            {
+                _nextTurnTime = Time.time + AiBidDelay;
             }
         }
 
