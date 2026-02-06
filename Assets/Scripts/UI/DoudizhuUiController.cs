@@ -288,6 +288,10 @@ namespace Doudizhu.UI
             if (_restartButton != null)
             {
                 _restartButton.gameObject.SetActive(active);
+                if (active)
+                {
+                    _restartButton.transform.SetAsLastSibling();
+                }
             }
         }
 
@@ -441,12 +445,13 @@ namespace Doudizhu.UI
         }
         private void RecordPlay(StepResult result)
         {
-            if (result.Kind == StepKind.Play || result.Kind == StepKind.Pass)
+            bool isPlayLike = result.Kind == StepKind.Play || result.Kind == StepKind.Finish;
+            if (isPlayLike || result.Kind == StepKind.Pass)
             {
                 ClearPlayerTable(result.PlayerIndex);
             }
 
-            if (result.Kind == StepKind.Play && result.Play.Cards.Count > 0)
+            if (isPlayLike && result.Play.Cards.Count > 0)
             {
                 _lastPlays[result.PlayerIndex] = new List<Card>(result.Play.Cards);
                 SetPassLabelActive(result.PlayerIndex, false);
