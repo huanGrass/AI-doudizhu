@@ -143,7 +143,7 @@ namespace Doudizhu.Game
                 if (_bidsMade >= 2)
                 {
                     EnterPlaying();
-                    return new StepResult(GamePhase.Playing, StepKind.Bid, _bidHighPlayer, 1, PlayAction.Pass(), -1);
+                    return new StepResult(GamePhase.Playing, StepKind.Bid, result.PlayerIndex, result.BidScore, PlayAction.Pass(), -1);
                 }
 
                 _currentPlayer = (_currentPlayer + 1) % _players.Count;
@@ -352,3 +352,4 @@ namespace Doudizhu.Game
         }
     }
 }
+

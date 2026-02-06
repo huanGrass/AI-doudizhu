@@ -851,16 +851,17 @@ namespace Doudizhu.UI
             obj.transform.SetParent(parent, false);
             Text text = obj.GetComponent<Text>();
             text.text = "叫地主";
-            text.fontSize = 20;
+            text.fontSize = 24;
             text.alignment = TextAnchor.MiddleCenter;
-            text.color = new Color(0.95f, 0.92f, 0.6f, 1f);
+            text.fontStyle = FontStyle.Bold;
+            text.color = new Color(1f, 0.9f, 0.2f, 1f);
             text.font = _centerTip != null ? _centerTip.font : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             RectTransform rect = obj.GetComponent<RectTransform>();
             rect.anchorMin = new Vector2(0.5f, 0.5f);
             rect.anchorMax = new Vector2(0.5f, 0.5f);
             rect.pivot = new Vector2(0.5f, 0.5f);
-            rect.sizeDelta = new Vector2(130f, 40f);
-            rect.anchoredPosition = new Vector2(0f, 30f);
+            rect.sizeDelta = new Vector2(160f, 44f);
+            rect.anchoredPosition = Vector2.zero;
             obj.SetActive(false);
             return text;
         }
@@ -872,6 +873,7 @@ namespace Doudizhu.UI
             text.text = "不出";
             text.fontSize = 22;
             text.alignment = TextAnchor.MiddleCenter;
+            text.fontStyle = FontStyle.Bold;
             text.color = new Color(0.35f, 0.25f, 0.1f, 1f);
             text.font = _centerTip != null ? _centerTip.font : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             RectTransform rect = obj.GetComponent<RectTransform>();
