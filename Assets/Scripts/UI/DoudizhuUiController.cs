@@ -564,7 +564,7 @@ namespace Doudizhu.UI
                 else
                 {
                     float width = data.Rank == CardRank.Ten ? 32f : 22f;
-                    rect.sizeDelta = new Vector2(width, rect.sizeDelta.y);
+                    rect.sizeDelta = new Vector2(width, 22f);
                     rect.anchoredPosition = new Vector2(6f, -6f);
                 }
 
