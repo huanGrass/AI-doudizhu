@@ -50,10 +50,14 @@ namespace Doudizhu.UI
         private Button _passButton;
         private Button _hintButton;
         private Button _restartButton;
+        private Text _noBeatTipText;
+        private float _noBeatTipStartTime = -1f;
+        private bool _noBeatTipShownThisTurn;
         private float _nextTurnTime;
 
         private const float AiPlayDelay = 1f;
         private const float AiBidDelay = 1f;
+        private const float NoBeatTipFadeDuration = 1.6f;
 
         private void Awake()
         {
@@ -75,6 +79,8 @@ namespace Doudizhu.UI
 
         private void Update()
         {
+            UpdateNoBeatTipFade();
+
             if (_engine == null || _engine.Phase == GamePhase.Finished)
             {
                 return;
@@ -144,6 +150,7 @@ namespace Doudizhu.UI
             }
 
             _restartButton = root.Find("TableArea/RestartButton")?.GetComponent<Button>();
+            EnsureNoBeatTip();
 
             CacheBottomCards();
         }
@@ -257,9 +264,30 @@ namespace Doudizhu.UI
             {
                 _centerTip.text = "等待出牌";
                 ClearAllBidLabels();
-                SetActionBarActive(_engine.CurrentPlayer == LocalPlayerIndex);
+                bool isLocalTurn = _engine.CurrentPlayer == LocalPlayerIndex;
+                SetActionBarActive(isLocalTurn);
                 SetBidBarActive(false);
                 SetRestartButtonActive(false);
+
+                if (isLocalTurn)
+                {
+                    if (!HasPlayableResponse())
+                    {
+                        if (!_noBeatTipShownThisTurn)
+                        {
+                            ShowNoBeatTip("没有牌能大过对方");
+                            _noBeatTipShownThisTurn = true;
+                        }
+                    }
+                    else
+                    {
+                        _noBeatTipShownThisTurn = false;
+                    }
+                }
+                else
+                {
+                    _noBeatTipShownThisTurn = false;
+                }
             }
             else
             {
@@ -720,10 +748,14 @@ namespace Doudizhu.UI
             }
 
             PlayAction action = _strategy.BuildAutoPlay(_engine.Players[LocalPlayerIndex], _engine.LastPlay);
-            if (action.Type != PlayType.Pass && action.Cards.Count > 0)
+            if (action.Type == PlayType.Pass || action.Cards.Count == 0)
             {
-                ApplySelectionFromCards(_engine.Players[LocalPlayerIndex].Hand, action.Cards);
+                ShowNoBeatTip("没有牌能大过对方");
+                OnPassClicked();
+                return;
             }
+
+            ApplySelectionFromCards(_engine.Players[LocalPlayerIndex].Hand, action.Cards);
         }
 
         private void OnRestartClicked()
@@ -780,11 +812,104 @@ namespace Doudizhu.UI
             return new GameEngine(_strategy, seed);
         }
 
+        private void EnsureNoBeatTip()
+        {
+            if (_actionBar == null)
+            {
+                return;
+            }
+
+            _noBeatTipText = _actionBar.transform.Find("NoBeatTip")?.GetComponent<Text>();
+            if (_noBeatTipText != null)
+            {
+                return;
+            }
+
+            GameObject obj = new GameObject("NoBeatTip", typeof(RectTransform), typeof(Text));
+            obj.transform.SetParent(_actionBar.transform, false);
+            Text text = obj.GetComponent<Text>();
+            text.font = _centerTip != null ? _centerTip.font : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.fontSize = 18;
+            text.fontStyle = FontStyle.Bold;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.color = new Color(1f, 0.92f, 0.35f, 0f);
+            text.text = string.Empty;
+
+            RectTransform rect = obj.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = new Vector2(320f, 30f);
+            rect.anchoredPosition = new Vector2(0f, -58f);
+
+            _noBeatTipText = text;
+        }
+
+        private void ShowNoBeatTip(string content)
+        {
+            if (_noBeatTipText == null)
+            {
+                return;
+            }
+
+            _noBeatTipText.text = content;
+            Color color = _noBeatTipText.color;
+            color.a = 1f;
+            _noBeatTipText.color = color;
+            _noBeatTipStartTime = Time.time;
+        }
+
+        private void UpdateNoBeatTipFade()
+        {
+            if (_noBeatTipText == null || _noBeatTipStartTime < 0f)
+            {
+                return;
+            }
+
+            float elapsed = Time.time - _noBeatTipStartTime;
+            if (elapsed >= NoBeatTipFadeDuration)
+            {
+                Color doneColor = _noBeatTipText.color;
+                doneColor.a = 0f;
+                _noBeatTipText.color = doneColor;
+                _noBeatTipStartTime = -1f;
+                return;
+            }
+
+            float alpha = 1f - (elapsed / NoBeatTipFadeDuration);
+            Color color = _noBeatTipText.color;
+            color.a = alpha;
+            _noBeatTipText.color = color;
+        }
+
+        private bool HasPlayableResponse()
+        {
+            if (_engine == null)
+            {
+                return true;
+            }
+
+            if (!_engine.LastPlay.HasValue || _engine.LastPlay.Value.Type == PlayType.Pass)
+            {
+                return true;
+            }
+
+            PlayAction action = _strategy.BuildAutoPlay(_engine.Players[LocalPlayerIndex], _engine.LastPlay);
+            return action.Type != PlayType.Pass && action.Cards.Count > 0;
+        }
         private void StartNewGame()
         {
             _strategy = new UiInputStrategy(LocalPlayerIndex, new AutoGameStrategy());
             _engine = CreateEngine();
             _selectedIndices.Clear();
+            _noBeatTipShownThisTurn = false;
+            _noBeatTipStartTime = -1f;
+            if (_noBeatTipText != null)
+            {
+                Color color = _noBeatTipText.color;
+                color.a = 0f;
+                _noBeatTipText.color = color;
+            }
             _nextTurnTime = Time.time;
             ClearAllTablePlays();
             ClearAllBidLabels();
