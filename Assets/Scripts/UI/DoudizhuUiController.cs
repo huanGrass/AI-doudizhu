@@ -814,33 +814,39 @@ namespace Doudizhu.UI
 
         private void EnsureNoBeatTip()
         {
-            if (_actionBar == null)
+            Transform parent = _tableArea != null ? _tableArea : _actionBar?.transform;
+            if (parent == null)
             {
                 return;
             }
 
-            _noBeatTipText = _actionBar.transform.Find("NoBeatTip")?.GetComponent<Text>();
+            _noBeatTipText = parent.Find("NoBeatTip")?.GetComponent<Text>();
             if (_noBeatTipText != null)
             {
                 return;
             }
 
-            GameObject obj = new GameObject("NoBeatTip", typeof(RectTransform), typeof(Text));
-            obj.transform.SetParent(_actionBar.transform, false);
+            GameObject obj = new GameObject("NoBeatTip", typeof(RectTransform), typeof(Text), typeof(Outline));
+            obj.transform.SetParent(parent, false);
+
             Text text = obj.GetComponent<Text>();
             text.font = _centerTip != null ? _centerTip.font : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            text.fontSize = 18;
+            text.fontSize = 20;
             text.fontStyle = FontStyle.Bold;
             text.alignment = TextAnchor.MiddleCenter;
-            text.color = new Color(1f, 0.92f, 0.35f, 0f);
+            text.color = new Color(1f, 0.2f, 0.2f, 0f);
             text.text = string.Empty;
+
+            Outline outline = obj.GetComponent<Outline>();
+            outline.effectColor = new Color(0f, 0f, 0f, 0.8f);
+            outline.effectDistance = new Vector2(1f, -1f);
 
             RectTransform rect = obj.GetComponent<RectTransform>();
             rect.anchorMin = new Vector2(0.5f, 0.5f);
             rect.anchorMax = new Vector2(0.5f, 0.5f);
             rect.pivot = new Vector2(0.5f, 0.5f);
-            rect.sizeDelta = new Vector2(320f, 30f);
-            rect.anchoredPosition = new Vector2(0f, -58f);
+            rect.sizeDelta = new Vector2(420f, 34f);
+            rect.anchoredPosition = new Vector2(0f, -45f);
 
             _noBeatTipText = text;
         }
@@ -856,6 +862,7 @@ namespace Doudizhu.UI
             Color color = _noBeatTipText.color;
             color.a = 1f;
             _noBeatTipText.color = color;
+            _noBeatTipText.transform.SetAsLastSibling();
             _noBeatTipStartTime = Time.time;
         }
 
