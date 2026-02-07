@@ -53,6 +53,7 @@ namespace Doudizhu.UI
         private Text _noBeatTipText;
         private float _noBeatTipStartTime = -1f;
         private bool _noBeatTipShownThisTurn;
+        private bool _suppressNoBeatTipUntilTurnChange;
         private float _nextTurnTime;
 
         private const float AiPlayDelay = 1f;
@@ -271,7 +272,7 @@ namespace Doudizhu.UI
 
                 if (isLocalTurn)
                 {
-                    if (!HasPlayableResponse())
+                    if (!_suppressNoBeatTipUntilTurnChange && !HasPlayableResponse())
                     {
                         if (!_noBeatTipShownThisTurn)
                         {
@@ -287,6 +288,7 @@ namespace Doudizhu.UI
                 else
                 {
                     _noBeatTipShownThisTurn = false;
+                    _suppressNoBeatTipUntilTurnChange = false;
                 }
             }
             else
@@ -736,6 +738,7 @@ namespace Doudizhu.UI
             }
 
             _selectedIndices.Clear();
+            _suppressNoBeatTipUntilTurnChange = true;
             _strategy.SetPlay(PlayAction.Pass());
             StepAndRefresh();
         }
@@ -910,6 +913,7 @@ namespace Doudizhu.UI
             _engine = CreateEngine();
             _selectedIndices.Clear();
             _noBeatTipShownThisTurn = false;
+            _suppressNoBeatTipUntilTurnChange = false;
             _noBeatTipStartTime = -1f;
             if (_noBeatTipText != null)
             {
