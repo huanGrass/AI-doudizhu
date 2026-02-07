@@ -238,6 +238,11 @@ namespace Doudizhu.Game
 
             if (action.Type == PlayType.Pass)
             {
+                if (lastPlay == null || lastPlay.Value.Type == PlayType.Pass)
+                {
+                    return PlayRules.FindAutoPlay(player.Hand, lastPlay);
+                }
+
                 return action;
             }
 

@@ -269,6 +269,10 @@ namespace Doudizhu.UI
                 SetActionBarActive(isLocalTurn);
                 SetBidBarActive(false);
                 SetRestartButtonActive(false);
+                if (_passButton != null)
+                {
+                    _passButton.interactable = isLocalTurn && CanPassCurrentTurn();
+                }
 
                 if (isLocalTurn)
                 {
@@ -283,12 +287,14 @@ namespace Doudizhu.UI
                     else
                     {
                         _noBeatTipShownThisTurn = false;
+                        HideNoBeatTip();
                     }
                 }
                 else
                 {
                     _noBeatTipShownThisTurn = false;
                     _suppressNoBeatTipUntilTurnChange = false;
+                    HideNoBeatTip();
                 }
             }
             else
@@ -737,8 +743,14 @@ namespace Doudizhu.UI
                 return;
             }
 
+            if (!CanPassCurrentTurn())
+            {
+                return;
+            }
+
             _selectedIndices.Clear();
             _suppressNoBeatTipUntilTurnChange = true;
+            HideNoBeatTip();
             _strategy.SetPlay(PlayAction.Pass());
             StepAndRefresh();
         }
@@ -892,6 +904,25 @@ namespace Doudizhu.UI
             _noBeatTipText.color = color;
         }
 
+        private bool CanPassCurrentTurn()
+        {
+            return _engine != null
+                && _engine.LastPlay.HasValue
+                && _engine.LastPlay.Value.Type != PlayType.Pass;
+        }
+
+        private void HideNoBeatTip()
+        {
+            if (_noBeatTipText == null)
+            {
+                return;
+            }
+
+            Color color = _noBeatTipText.color;
+            color.a = 0f;
+            _noBeatTipText.color = color;
+            _noBeatTipStartTime = -1f;
+        }
         private bool HasPlayableResponse()
         {
             if (_engine == null)
@@ -914,13 +945,7 @@ namespace Doudizhu.UI
             _selectedIndices.Clear();
             _noBeatTipShownThisTurn = false;
             _suppressNoBeatTipUntilTurnChange = false;
-            _noBeatTipStartTime = -1f;
-            if (_noBeatTipText != null)
-            {
-                Color color = _noBeatTipText.color;
-                color.a = 0f;
-                _noBeatTipText.color = color;
-            }
+            HideNoBeatTip();
             _nextTurnTime = Time.time;
             ClearAllTablePlays();
             ClearAllBidLabels();
