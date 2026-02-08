@@ -11,138 +11,181 @@ namespace Doudizhu.UI
 {
     public sealed class OnlineLobbyBridge : MonoBehaviour
     {
-        private const string DefaultServerBaseUrl = "http://127.0.0.1:5014";
+        private const string ServerBaseUrl = "http://127.0.0.1:5014";
         private const string LocalPlayerName = "Madlee";
 
-        private readonly Dictionary<int, TableInfoDto> _tables = new Dictionary<int, TableInfoDto>();
+        private readonly HashSet<int> _patchedTableIds = new HashSet<int>();
+
         private DoudizhuRuntimeUiBuilder _builder;
         private MethodInfo _startGameMethod;
-        private Button _onlineButton;
-        private bool _initialized;
+        private bool _onlineButtonHooked;
+        private bool _isRefreshing;
+        private bool _lobbySeen;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Bootstrap()
         {
+            if (FindAnyObjectByType<OnlineLobbyBridge>() != null)
+            {
+                return;
+            }
+
             GameObject obj = new GameObject("OnlineLobbyBridge");
             DontDestroyOnLoad(obj);
             obj.AddComponent<OnlineLobbyBridge>();
         }
 
-        private void Start()
+        private void Update()
         {
-            StartCoroutine(BindWhenReady());
+            EnsureBuilderRefs();
+            TryHookOnlineButton();
+            AutoRefreshWhenLobbyVisible();
         }
 
-        private IEnumerator BindWhenReady()
+        private void EnsureBuilderRefs()
         {
-            float timeoutAt = Time.realtimeSinceStartup + 8f;
-            while (Time.realtimeSinceStartup < timeoutAt)
+            if (_builder == null)
             {
                 _builder = FindAnyObjectByType<DoudizhuRuntimeUiBuilder>();
-                if (_builder != null)
-                {
-                    GameObject onlineBtnObj = GameObject.Find("UIRoot/ModePanel/OnlineModeButton");
-                    Transform onlineBtnTransform = onlineBtnObj != null ? onlineBtnObj.transform : null;
-                    if (onlineBtnTransform != null)
-                    {
-                        _onlineButton = onlineBtnTransform.GetComponent<Button>();
-                        if (_onlineButton != null)
-                        {
-                            _startGameMethod = typeof(DoudizhuRuntimeUiBuilder).GetMethod("StartGame", BindingFlags.Instance | BindingFlags.NonPublic);
-                            if (_startGameMethod != null)
-                            {
-                                _onlineButton.onClick.AddListener(OnOnlineClicked);
-                                _initialized = true;
-                                yield break;
-                            }
-                        }
-                    }
-                }
+            }
 
-                yield return null;
+            if (_startGameMethod == null)
+            {
+                _startGameMethod = typeof(DoudizhuRuntimeUiBuilder).GetMethod("StartGame", BindingFlags.Instance | BindingFlags.NonPublic);
+            }
+        }
+
+        private void TryHookOnlineButton()
+        {
+            if (_onlineButtonHooked || _builder == null || _startGameMethod == null)
+            {
+                return;
+            }
+
+            GameObject onlineBtnObj = GameObject.Find("UIRoot/ModePanel/OnlineModeButton");
+            if (onlineBtnObj == null)
+            {
+                return;
+            }
+
+            Button onlineButton = onlineBtnObj.GetComponent<Button>();
+            if (onlineButton == null)
+            {
+                return;
+            }
+
+            onlineButton.onClick.AddListener(OnOnlineClicked);
+            _onlineButtonHooked = true;
+        }
+
+        private void AutoRefreshWhenLobbyVisible()
+        {
+            GameObject lobby = GameObject.Find("UIRoot/LobbyPanel");
+            bool visible = lobby != null && lobby.activeInHierarchy;
+            if (!visible)
+            {
+                _lobbySeen = false;
+                _patchedTableIds.Clear();
+                return;
+            }
+
+            if (!_lobbySeen && !_isRefreshing)
+            {
+                _lobbySeen = true;
+                StartCoroutine(RefreshTablesAndPatchJoinButtons());
             }
         }
 
         private void OnOnlineClicked()
         {
-            if (!_initialized || _builder == null)
+            if (!_isRefreshing)
             {
-                return;
+                StartCoroutine(RefreshTablesAndPatchJoinButtons());
             }
-
-            StartCoroutine(RefreshTablesAndWireJoin());
         }
 
-        private IEnumerator RefreshTablesAndWireJoin()
+        private IEnumerator RefreshTablesAndPatchJoinButtons()
         {
-            string url = DefaultServerBaseUrl + "/api/tables";
+            _isRefreshing = true;
+            string url = ServerBaseUrl + "/api/tables";
             using (UnityWebRequest request = UnityWebRequest.Get(url))
             {
                 request.timeout = 4;
                 yield return request.SendWebRequest();
                 if (request.result != UnityWebRequest.Result.Success)
                 {
+                    _isRefreshing = false;
                     yield break;
                 }
 
                 TableListResponseDto response = JsonUtility.FromJson<TableListResponseDto>(request.downloadHandler.text);
                 if (response == null || response.tables == null)
                 {
+                    _isRefreshing = false;
                     yield break;
                 }
 
-                _tables.Clear();
                 for (int i = 0; i < response.tables.Length; i++)
                 {
-                    TableInfoDto table = response.tables[i];
-                    _tables[table.tableId] = table;
-                    UpdateTableUi(table);
+                    PatchTableUi(response.tables[i]);
                 }
             }
+
+            _isRefreshing = false;
         }
 
-        private void UpdateTableUi(TableInfoDto table)
+        private void PatchTableUi(TableInfoDto table)
         {
             GameObject tableObj = GameObject.Find($"UIRoot/LobbyPanel/Table_{table.tableId}");
-            Transform tableRoot = tableObj != null ? tableObj.transform : null;
-            if (tableRoot == null)
+            if (tableObj == null)
             {
                 return;
             }
 
+            Transform tableRoot = tableObj.transform;
             Text players = tableRoot.Find("Players")?.GetComponent<Text>();
             Text seat = tableRoot.Find("SeatText")?.GetComponent<Text>();
             Button joinButton = tableRoot.Find("JoinButton")?.GetComponent<Button>();
 
-            string playersText = table.players != null && table.players.Length > 0
-                ? string.Join("、", table.players)
-                : "暂无玩家";
             if (players != null)
             {
-                players.text = $"玩家: {playersText}";
+                string names = table.players != null && table.players.Length > 0 ? string.Join("、", table.players) : "暂无玩家";
+                players.text = $"玩家: {names}";
             }
 
-            int count = table.playerCount;
             int capacity = table.capacity <= 0 ? 3 : table.capacity;
             if (seat != null)
             {
-                seat.text = $"人数: {count}/{capacity}";
+                seat.text = $"人数: {table.playerCount}/{capacity}";
             }
 
-            if (joinButton != null)
+            if (joinButton == null)
+            {
+                return;
+            }
+
+            if (!_patchedTableIds.Contains(table.tableId))
             {
                 joinButton.onClick.RemoveAllListeners();
-                int tableId = table.tableId;
-                joinButton.onClick.AddListener(() => StartCoroutine(JoinTableAndStart(tableId)));
-                joinButton.interactable = count < capacity || ContainsPlayer(table, LocalPlayerName);
+                int capturedTableId = table.tableId;
+                joinButton.onClick.AddListener(() => StartCoroutine(JoinAndEnter(capturedTableId)));
+                _patchedTableIds.Add(table.tableId);
             }
+
+            bool mySeat = ContainsPlayer(table, LocalPlayerName);
+            joinButton.interactable = mySeat || table.playerCount < capacity;
         }
 
-        private IEnumerator JoinTableAndStart(int tableId)
+        private IEnumerator JoinAndEnter(int tableId)
         {
-            string url = $"{DefaultServerBaseUrl}/api/tables/{tableId}/join";
-            JoinTableRequestDto requestPayload = new JoinTableRequestDto { playerName = LocalPlayerName };
-            byte[] payload = Encoding.UTF8.GetBytes(JsonUtility.ToJson(requestPayload));
+            if (_builder == null || _startGameMethod == null)
+            {
+                yield break;
+            }
+
+            string url = $"{ServerBaseUrl}/api/tables/{tableId}/join";
+            JoinTableRequestDto req = new JoinTableRequestDto { playerName = LocalPlayerName };
+            byte[] payload = Encoding.UTF8.GetBytes(JsonUtility.ToJson(req));
 
             using (UnityWebRequest request = new UnityWebRequest(url, UnityWebRequest.kHttpVerbPOST))
             {
@@ -176,7 +219,7 @@ namespace Doudizhu.UI
 
             for (int i = 0; i < table.players.Length; i++)
             {
-                if (table.players[i] == playerName)
+                if (string.Equals(table.players[i], playerName, StringComparison.Ordinal))
                 {
                     return true;
                 }
