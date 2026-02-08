@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using NUnit.Framework;
 
+#if UNITY_INCLUDE_TESTS
 namespace Doudizhu.Game.Tests
 {
     public class GameEngineTests
@@ -181,3 +182,4 @@ namespace Doudizhu.Game.Tests
         }
     }
 }
+#endif
