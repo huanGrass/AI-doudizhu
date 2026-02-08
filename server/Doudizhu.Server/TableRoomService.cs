@@ -704,7 +704,7 @@ public sealed class TableRoomService
         {
             CardRank.JokerSmall => "SJ",
             CardRank.JokerBig => "BJ",
-            CardRank.Jack => "J",
+            CardRank.Jack => "11",
             CardRank.Queen => "Q",
             CardRank.King => "K",
             CardRank.Ace => "A",
@@ -770,6 +770,7 @@ public sealed class TableRoomService
             "K" => CardRank.King,
             "Q" => CardRank.Queen,
             "J" => CardRank.Jack,
+            "11" => CardRank.Jack,
             "2" => CardRank.Two,
             "10" => CardRank.Ten,
             "9" => CardRank.Nine,
