@@ -1,6 +1,5 @@
 using System;
 using System.Collections;
-using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -12,8 +11,6 @@ namespace Doudizhu.UI
     {
         private const string ServerBaseUrl = "http://127.0.0.1:5014";
         private const string LocalPlayerName = "Madlee";
-
-        private readonly HashSet<int> _patchedTableIds = new HashSet<int>();
 
         private bool _onlineButtonHooked;
         private bool _isRefreshing;
@@ -68,7 +65,6 @@ namespace Doudizhu.UI
             if (!visible)
             {
                 _lobbySeen = false;
-                _patchedTableIds.Clear();
                 return;
             }
 
@@ -99,7 +95,7 @@ namespace Doudizhu.UI
                 yield return request.SendWebRequest();
                 if (request.result != UnityWebRequest.Result.Success)
                 {
-                    SetTopStatus("联机模式  |  服务端不可用");
+                    SetTopStatus("联机模式 | 服务端不可用");
                     _isRefreshing = false;
                     yield break;
                 }
@@ -107,12 +103,12 @@ namespace Doudizhu.UI
                 TableListResponseDto response = JsonUtility.FromJson<TableListResponseDto>(request.downloadHandler.text);
                 if (response == null || response.tables == null)
                 {
-                    SetTopStatus("联机模式  |  服务端数据无效");
+                    SetTopStatus("联机模式 | 服务端返回无效数据");
                     _isRefreshing = false;
                     yield break;
                 }
 
-                SetTopStatus("联机模式  |  已连接服务端");
+                SetTopStatus("联机模式 | 已连接服务端");
                 for (int i = 0; i < response.tables.Length; i++)
                 {
                     PatchTableUi(response.tables[i]);
@@ -152,20 +148,17 @@ namespace Doudizhu.UI
                 return;
             }
 
-            if (!_patchedTableIds.Contains(table.tableId))
-            {
-                joinButton.onClick.RemoveAllListeners();
-                int capturedTableId = table.tableId;
-                joinButton.onClick.AddListener(() => StartCoroutine(JoinTableOnly(capturedTableId)));
-                _patchedTableIds.Add(table.tableId);
-            }
-
-            bool mySeat = ContainsPlayer(table, LocalPlayerName);
-            joinButton.interactable = mySeat || table.playerCount < capacity;
+            joinButton.onClick.RemoveAllListeners();
+            int capturedTableId = table.tableId;
+            joinButton.onClick.AddListener(() => StartCoroutine(JoinTableOnly(capturedTableId)));
+            joinButton.interactable = table.playerCount < capacity || ContainsPlayer(table, LocalPlayerName);
         }
 
         private IEnumerator JoinTableOnly(int tableId)
         {
+            SetTopStatus($"联机模式 | 正在加入桌子 {tableId}...");
+            Debug.Log($"[OnlineLobbyBridge] Join table request: {tableId}");
+
             string url = $"{ServerBaseUrl}/api/tables/{tableId}/join";
             JoinTableRequestDto req = new JoinTableRequestDto { playerName = LocalPlayerName };
             byte[] payload = Encoding.UTF8.GetBytes(JsonUtility.ToJson(req));
@@ -180,12 +173,14 @@ namespace Doudizhu.UI
                 yield return request.SendWebRequest();
                 if (request.result != UnityWebRequest.Result.Success)
                 {
-                    SetTopStatus("联机模式  |  入桌失败");
+                    string err = string.IsNullOrEmpty(request.error) ? $"HTTP {request.responseCode}" : request.error;
+                    SetTopStatus($"联机模式 | 入桌失败: {err}");
+                    Debug.LogWarning($"[OnlineLobbyBridge] Join failed. table={tableId}, err={err}, code={request.responseCode}");
                     yield break;
                 }
             }
 
-            SetTopStatus($"联机模式  |  已加入桌子 {tableId}");
+            SetTopStatus($"联机模式 | 已加入桌子 {tableId}（不进入单机）");
             if (!_isRefreshing)
             {
                 StartCoroutine(RefreshTablesAndPatchJoinButtons());
@@ -222,7 +217,7 @@ namespace Doudizhu.UI
                 }
             }
 
-            SetTopStatus("联机模式  |  正在连接服务端");
+            SetTopStatus("联机模式 | 正在连接服务端...");
         }
 
         private static void SetTopStatus(string text)
