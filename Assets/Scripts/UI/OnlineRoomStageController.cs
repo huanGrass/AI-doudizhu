@@ -10,14 +10,17 @@ namespace Doudizhu.UI
     {
         private const string ServerBaseUrl = "http://127.0.0.1:5014";
         private const float RefreshInterval = 1f;
+        private const int StartPlayerCount = 3;
+
+        private bool _started;
 
         private void Start()
         {
-            ApplyStaticRoomStage();
+            ApplyRoomWaitingStage();
             StartCoroutine(PollPlayers());
         }
 
-        private void ApplyStaticRoomStage()
+        private void ApplyRoomWaitingStage()
         {
             DoudizhuUiController gameController = GetComponent<DoudizhuUiController>();
             if (gameController != null)
@@ -40,7 +43,7 @@ namespace Doudizhu.UI
 
         private IEnumerator PollPlayers()
         {
-            while (true)
+            while (!_started)
             {
                 string url = $"{ServerBaseUrl}/api/tables";
                 using (UnityWebRequest request = UnityWebRequest.Get(url))
@@ -59,6 +62,7 @@ namespace Doudizhu.UI
                                 {
                                     OnlineRoomSession.ReplacePlayers(table.players);
                                     RefreshSeats();
+                                    TryStartMatch(table.players);
                                     break;
                                 }
                             }
@@ -66,8 +70,33 @@ namespace Doudizhu.UI
                     }
                 }
 
-                yield return new WaitForSeconds(RefreshInterval);
+                if (!_started)
+                {
+                    yield return new WaitForSeconds(RefreshInterval);
+                }
             }
+        }
+
+        private void TryStartMatch(string[] players)
+        {
+            int count = players == null ? 0 : players.Length;
+            if (count < StartPlayerCount)
+            {
+                return;
+            }
+
+            DoudizhuUiController gameController = GetComponent<DoudizhuUiController>();
+            if (gameController == null)
+            {
+                return;
+            }
+
+            _started = true;
+            SetText("TopBar/Status", $"联机房间 | 桌子 {OnlineRoomSession.TableId} | 开始对局");
+            SetNodeActive("BottomCards", true);
+            SetNodeActive("HandArea", true);
+            gameController.enabled = true;
+            enabled = false;
         }
 
         private void RefreshSeats()
