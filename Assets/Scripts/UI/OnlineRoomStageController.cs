@@ -23,16 +23,14 @@ namespace Doudizhu.UI
             SetText("TableArea/CenterTip", "等待玩家准备");
 
             SetNodeActive("ActionBar", false);
+            SetNodeActive("TableArea/ActionBar", false);
+            SetNodeActive("TableArea/BidBar", false);
             SetNodeActive("TableArea/RestartButton", false);
             SetNodeActive("BottomCards", false);
             SetNodeActive("HandArea", false);
 
             List<string> players = new List<string>(OnlineRoomSession.Players);
-            string localName = OnlineRoomSession.LocalPlayerName;
-            if (string.IsNullOrWhiteSpace(localName))
-            {
-                localName = "我";
-            }
+            string localName = string.IsNullOrWhiteSpace(OnlineRoomSession.LocalPlayerName) ? "我" : OnlineRoomSession.LocalPlayerName;
 
             SetPanel("PlayerPanel_Bottom", localName, true);
 
