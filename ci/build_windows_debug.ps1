@@ -7,7 +7,7 @@
 $ErrorActionPreference = 'Stop'
 
 if ([string]::IsNullOrWhiteSpace($ProjectDir)) {
-    $ProjectDir = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+    $ProjectDir = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 }
 
 $projectName = Split-Path $ProjectDir -Leaf
