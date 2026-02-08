@@ -249,6 +249,12 @@ namespace Doudizhu.UI
         {
             while (true)
             {
+                if (_readyRequesting || _bidRequesting || _playRequesting || _restartRequesting || _leaveRequesting)
+                {
+                    yield return new WaitForSecondsRealtime(RefreshInterval);
+                    continue;
+                }
+
                 yield return FetchAndApplyState();
                 yield return new WaitForSecondsRealtime(RefreshInterval);
             }
@@ -266,6 +272,11 @@ namespace Doudizhu.UI
                 if (request.result != UnityWebRequest.Result.Success)
                 {
                     SetText("TopBar/Status", $"联机房间 | 桌子 {OnlineRoomSession.TableId} | 同步失败");
+                    yield break;
+                }
+
+                if (_readyRequesting || _bidRequesting || _playRequesting || _restartRequesting || _leaveRequesting)
+                {
                     yield break;
                 }
 
@@ -443,15 +454,16 @@ namespace Doudizhu.UI
             for (int i = _lastBidHistoryCount; i < history.Length; i++)
             {
                 BidActionDto bid = history[i];
-                int idx = ResolveSeatIndex(players, bid.playerName, bid.playerIndex);
-                if (idx < 0)
+                int serverIdx = ResolveServerIndex(players, bid.playerName, bid.playerIndex);
+                int seatIdx = ResolveSeatIndex(players, bid.playerName, bid.playerIndex);
+                if (seatIdx < 0 || serverIdx < 0)
                 {
                     continue;
                 }
 
                 bool isRobStage = bid.bidStage == (int)TableBidStage.Rob;
-                SetBidLabel(idx, bid.callLandlord ? (isRobStage ? "抢地主" : "叫地主") : (isRobStage ? "不抢" : "不叫"), true);
-                StepResult step = new StepResult(GamePhase.Bidding, StepKind.Bid, idx, bid.callLandlord ? 1 : 0, PlayAction.Pass(), -1);
+                SetBidLabel(seatIdx, bid.callLandlord ? (isRobStage ? "抢地主" : "叫地主") : (isRobStage ? "不抢" : "不叫"), true);
+                StepResult step = new StepResult(GamePhase.Bidding, StepKind.Bid, serverIdx, bid.callLandlord ? 1 : 0, PlayAction.Pass(), -1);
                 DoudizhuAudioManager.Instance?.PlayStep(step, isRobStage ? BidStage.Rob : BidStage.Call, null);
             }
 
@@ -494,17 +506,18 @@ namespace Doudizhu.UI
                 return;
             }
 
-            int idx = ResolveSeatIndex(players, state.lastActionPlayer, -1);
-            if (idx < 0)
+            int serverIdx = ResolveServerIndex(players, state.lastActionPlayer, -1);
+            int seatIdx = ResolveSeatIndex(players, state.lastActionPlayer, -1);
+            if (seatIdx < 0 || serverIdx < 0)
             {
                 return;
             }
 
             if (state.lastActionWasPass)
             {
-                SetPassLabelActive(idx, true);
-                StepResult step = new StepResult(GamePhase.Playing, StepKind.Pass, idx, 0, PlayAction.Pass(), -1);
-                PlayAction? lastPlay = cards.Length > 0 ? PlayAction.Single(new Card(CardSuit.Spade, CardRank.Three)) : PlayAction.Pass();
+                SetPassLabelActive(seatIdx, true);
+                StepResult step = new StepResult(GamePhase.Playing, StepKind.Pass, serverIdx, 0, PlayAction.Pass(), -1);
+                PlayAction? lastPlay = cards.Length > 0 ? PlayAction.FromCards(ParseCards(cards)) : PlayAction.Pass();
                 DoudizhuAudioManager.Instance?.PlayStep(step, BidStage.Call, lastPlay);
                 if (cards.Length == 0)
                 {
@@ -521,9 +534,9 @@ namespace Doudizhu.UI
             }
 
             ClearAllTablePlays();
-            _lastPlays[idx] = parsed;
-            SetPassLabelActive(idx, false);
-            StepResult playStep = new StepResult(GamePhase.Playing, StepKind.Play, idx, 0, PlayAction.FromCards(new List<Card>(parsed)), -1);
+            _lastPlays[seatIdx] = parsed;
+            SetPassLabelActive(seatIdx, false);
+            StepResult playStep = new StepResult(GamePhase.Playing, StepKind.Play, serverIdx, 0, PlayAction.FromCards(new List<Card>(parsed)), -1);
             DoudizhuAudioManager.Instance?.PlayStep(playStep, BidStage.Call, null);
         }
 
@@ -1498,6 +1511,22 @@ namespace Doudizhu.UI
             }
 
             if (fallbackServerIndex is >= 0 and <= 2)
+            {
+                return fallbackServerIndex;
+            }
+
+            return -1;
+        }
+
+        private static int ResolveServerIndex(string[] players, string playerName, int fallbackServerIndex)
+        {
+            int byName = FindPlayerIndex(players, playerName);
+            if (byName >= 0)
+            {
+                return byName;
+            }
+
+            if (fallbackServerIndex >= 0 && fallbackServerIndex < players.Length)
             {
                 return fallbackServerIndex;
             }
