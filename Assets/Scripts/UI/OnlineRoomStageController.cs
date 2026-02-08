@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Text;
+using Doudizhu.Audio;
 using Doudizhu.Game;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -16,6 +17,9 @@ namespace Doudizhu.UI
         private const float HandSpacing = 28f;
         private const float HandCardWidth = 64f;
         private const float HandCardHeight = 92f;
+        private const float TableSpacing = 24f;
+        private const float TableCardWidth = 56f;
+        private const float TableCardHeight = 80f;
 
         private bool _readyRequesting;
         private bool _bidRequesting;
@@ -32,21 +36,38 @@ namespace Doudizhu.UI
         private Button _leaveButton;
 
         private Transform _handArea;
+        private Transform _tableArea;
+        private Transform _bottomArea;
         private DoudizhuUiRefs _refs;
         private readonly List<GameObject> _handCards = new();
         private readonly List<Card> _currentHandCards = new();
         private readonly HashSet<int> _selectedIndices = new();
+        private readonly List<GameObject> _bottomBacks = new();
+        private readonly List<GameObject> _bottomFaces = new();
+        private readonly Dictionary<int, RectTransform> _playAreas = new();
+        private readonly Dictionary<int, List<GameObject>> _playCards = new();
+        private readonly Dictionary<int, List<Card>> _lastPlays = new();
+        private readonly Dictionary<int, Text> _passLabels = new();
+        private readonly Dictionary<int, Text> _bidLabels = new();
+
+        private int _lastBidHistoryCount;
+        private string _lastActionKey = string.Empty;
+        private int _lastPhase = -1;
 
         private void Start()
         {
             _refs = GetComponent<DoudizhuUiRefs>();
             _handArea = transform.Find("HandArea");
+            _tableArea = transform.Find("TableArea");
+            _bottomArea = transform.Find("BottomCards");
 
             ApplyRoomWaitingStage();
             BindBidButtons();
             BindActionButtons();
             BindRestartButton();
             EnsureLeaveButton();
+            EnsurePlayAreas();
+            CacheBottomCards();
             StartCoroutine(PollStateLoop());
         }
 
@@ -226,7 +247,9 @@ namespace Doudizhu.UI
 
             if (_hintButton != null)
             {
-                _hintButton.gameObject.SetActive(false);
+                _hintButton.gameObject.SetActive(true);
+                _hintButton.onClick.RemoveAllListeners();
+                _hintButton.onClick.AddListener(OnHintClicked);
             }
         }
 
@@ -274,6 +297,26 @@ namespace Doudizhu.UI
 
             RefreshSeats(players, readyStates, connectedStates, handCounts);
             UpdateHandCards(state.myHand ?? Array.Empty<string>());
+            ProcessBidHistory(state, players);
+            ProcessLastAction(state, players);
+            UpdateTableCards();
+            UpdateBottomCards(state.phase >= 2, state.bottomCards ?? Array.Empty<string>());
+
+            if (_lastPhase != state.phase)
+            {
+                if (state.phase <= 1)
+                {
+                    ClearAllTablePlays();
+                }
+
+                if (state.phase == 0)
+                {
+                    _lastBidHistoryCount = 0;
+                    ClearAllBidLabels();
+                }
+
+                _lastPhase = state.phase;
+            }
 
             int localIndex = FindPlayerIndex(players, OnlineRoomSession.LocalPlayerName);
             bool localInTable = localIndex >= 0;
@@ -288,6 +331,7 @@ namespace Doudizhu.UI
                 SetNodeActive("TableArea/ActionBar", false);
                 SetNodeActive("TableArea/RestartButton", false);
                 SetNodeActive("HandArea", false);
+                SetNodeActive("BottomCards", false);
 
                 if (localInTable && !localReady && !_readyRequesting)
                 {
@@ -308,6 +352,8 @@ namespace Doudizhu.UI
                 SetNodeActive("TableArea/ActionBar", false);
                 SetNodeActive("TableArea/RestartButton", false);
                 SetNodeActive("HandArea", false);
+                SetNodeActive("BottomCards", true);
+                ShowBottomBacksOnly();
                 return;
             }
 
@@ -325,6 +371,7 @@ namespace Doudizhu.UI
                 SetNodeActive("TableArea/ActionBar", myTurn);
                 SetNodeActive("TableArea/RestartButton", false);
                 SetNodeActive("HandArea", true);
+                SetNodeActive("BottomCards", true);
 
                 if (!myTurn)
                 {
@@ -342,6 +389,11 @@ namespace Doudizhu.UI
                     _passButton.interactable = myTurn && state.lastPlayCards != null && state.lastPlayCards.Length > 0;
                 }
 
+                if (_hintButton != null)
+                {
+                    _hintButton.interactable = myTurn;
+                }
+
                 return;
             }
 
@@ -352,6 +404,7 @@ namespace Doudizhu.UI
             SetNodeActive("TableArea/ActionBar", false);
             SetNodeActive("TableArea/RestartButton", true);
             SetNodeActive("HandArea", true);
+            SetNodeActive("BottomCards", true);
             if (_restartButton != null && localInTable)
             {
                 bool[] votes = state.restartVotes ?? Array.Empty<bool>();
@@ -376,6 +429,135 @@ namespace Doudizhu.UI
             }
 
             return "等待出牌";
+        }
+
+        private void ProcessBidHistory(TableStateDto state, string[] players)
+        {
+            BidActionDto[] history = state.bidHistory ?? Array.Empty<BidActionDto>();
+            if (_lastBidHistoryCount > history.Length)
+            {
+                _lastBidHistoryCount = 0;
+                ClearAllBidLabels();
+            }
+
+            for (int i = _lastBidHistoryCount; i < history.Length; i++)
+            {
+                BidActionDto bid = history[i];
+                int idx = bid.playerIndex >= 0 ? bid.playerIndex : FindPlayerIndex(players, bid.playerName);
+                if (idx < 0)
+                {
+                    continue;
+                }
+
+                SetBidLabel(idx, bid.callLandlord ? "叫地主" : "不叫", true);
+                StepResult step = new StepResult(GamePhase.Bidding, StepKind.Bid, idx, bid.callLandlord ? 1 : 0, PlayAction.Pass(), -1);
+                DoudizhuAudioManager.Instance?.PlayStep(step, BidStage.Call, null);
+            }
+
+            _lastBidHistoryCount = history.Length;
+        }
+
+        private void ProcessLastAction(TableStateDto state, string[] players)
+        {
+            string[] cards = state.lastPlayCards ?? Array.Empty<string>();
+            string actionKey = $"{state.phase}|{state.lastActionPlayer}|{state.lastActionWasPass}|{string.Join(",", cards)}";
+            if (string.Equals(actionKey, _lastActionKey, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _lastActionKey = actionKey;
+            if (string.IsNullOrWhiteSpace(state.lastActionPlayer))
+            {
+                return;
+            }
+
+            int idx = FindPlayerIndex(players, state.lastActionPlayer);
+            if (idx < 0)
+            {
+                return;
+            }
+
+            if (state.lastActionWasPass)
+            {
+                SetPassLabelActive(idx, true);
+                StepResult step = new StepResult(GamePhase.Playing, StepKind.Pass, idx, 0, PlayAction.Pass(), -1);
+                PlayAction? lastPlay = cards.Length > 0 ? PlayAction.Single(new Card(CardSuit.Spade, CardRank.Three)) : PlayAction.Pass();
+                DoudizhuAudioManager.Instance?.PlayStep(step, BidStage.Call, lastPlay);
+                if (cards.Length == 0)
+                {
+                    ClearAllTablePlays();
+                }
+
+                return;
+            }
+
+            List<Card> parsed = ParseCards(cards);
+            if (parsed.Count == 0)
+            {
+                return;
+            }
+
+            ClearPlayerTable(idx);
+            _lastPlays[idx] = parsed;
+            SetPassLabelActive(idx, false);
+            StepResult playStep = new StepResult(GamePhase.Playing, StepKind.Play, idx, 0, PlayAction.FromCards(new List<Card>(parsed)), -1);
+            DoudizhuAudioManager.Instance?.PlayStep(playStep, BidStage.Call, null);
+        }
+
+        private void OnHintClicked()
+        {
+            Transform actionBar = transform.Find("TableArea/ActionBar") ?? transform.Find("ActionBar");
+            if (actionBar == null || !actionBar.gameObject.activeInHierarchy)
+            {
+                return;
+            }
+
+            PlayAction? lastPlay = null;
+            foreach (List<Card> cards in _lastPlays.Values)
+            {
+                if (cards != null && cards.Count > 0)
+                {
+                    lastPlay = PlayAction.FromCards(new List<Card>(cards));
+                }
+            }
+
+            PlayAction hint = PlayRules.FindAutoPlay(new List<Card>(_currentHandCards), lastPlay);
+            if (hint.Type == PlayType.Pass || hint.Cards.Count == 0)
+            {
+                SetText("TableArea/CenterTip", "没有牌能大过对方");
+                return;
+            }
+
+            ApplySelectionFromCards(_currentHandCards, hint.Cards);
+        }
+
+        private void ApplySelectionFromCards(List<Card> hand, List<Card> cards)
+        {
+            _selectedIndices.Clear();
+            bool[] used = new bool[hand.Count];
+            for (int i = 0; i < cards.Count; i++)
+            {
+                Card target = cards[i];
+                for (int j = 0; j < hand.Count; j++)
+                {
+                    if (used[j] || !hand[j].Equals(target))
+                    {
+                        continue;
+                    }
+
+                    used[j] = true;
+                    _selectedIndices.Add(j);
+                    break;
+                }
+            }
+
+            if (_playButton != null)
+            {
+                _playButton.interactable = _selectedIndices.Count > 0;
+            }
+
+            RefreshHandVisual();
         }
 
         private void UpdateHandCards(string[] handCodes)
@@ -460,6 +642,257 @@ namespace Doudizhu.UI
                 GameObject card = Instantiate(_refs.CardFacePrefab, _handArea);
                 card.name = $"OnlineHandCard_{_handCards.Count + 1}";
                 _handCards.Add(card);
+            }
+        }
+
+        private void EnsurePlayAreas()
+        {
+            if (_tableArea == null || _playAreas.Count > 0)
+            {
+                return;
+            }
+
+            _playAreas[0] = CreatePlayArea("PlayArea_Bottom", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(260f, 100f), new Vector2(0f, -60f));
+            _playAreas[1] = CreatePlayArea("PlayArea_Left", new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(200f, 100f), new Vector2(40f, 40f));
+            _playAreas[2] = CreatePlayArea("PlayArea_Right", new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(200f, 100f), new Vector2(-40f, 40f));
+
+            foreach (KeyValuePair<int, RectTransform> area in _playAreas)
+            {
+                _passLabels[area.Key] = CreateStateLabel(area.Value, "PassText", "不出", 22, new Color(0.35f, 0.25f, 0.1f, 1f), new Vector2(120f, 40f));
+                _bidLabels[area.Key] = CreateStateLabel(area.Value, "BidText", "叫地主", 24, new Color(1f, 0.9f, 0.2f, 1f), new Vector2(160f, 44f));
+                _passLabels[area.Key].gameObject.SetActive(false);
+                _bidLabels[area.Key].gameObject.SetActive(false);
+            }
+        }
+
+        private RectTransform CreatePlayArea(string name, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 size, Vector2 pos)
+        {
+            GameObject area = new GameObject(name, typeof(RectTransform));
+            RectTransform rect = area.GetComponent<RectTransform>();
+            rect.SetParent(_tableArea, false);
+            rect.anchorMin = anchorMin;
+            rect.anchorMax = anchorMax;
+            rect.pivot = pivot;
+            rect.sizeDelta = size;
+            rect.anchoredPosition = pos;
+            return rect;
+        }
+
+        private static Text CreateStateLabel(RectTransform parent, string name, string content, int size, Color color, Vector2 rectSize)
+        {
+            GameObject go = new GameObject(name, typeof(RectTransform), typeof(Text));
+            go.transform.SetParent(parent, false);
+            Text text = go.GetComponent<Text>();
+            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.text = content;
+            text.fontSize = size;
+            text.fontStyle = FontStyle.Bold;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.color = color;
+
+            RectTransform rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = rectSize;
+            rect.anchoredPosition = Vector2.zero;
+            return text;
+        }
+
+        private void UpdateTableCards()
+        {
+            if (_refs == null || _refs.CardFacePrefab == null)
+            {
+                return;
+            }
+
+            foreach (KeyValuePair<int, RectTransform> area in _playAreas)
+            {
+                int player = area.Key;
+                if (_lastPlays.TryGetValue(player, out List<Card> cards) && cards.Count > 0)
+                {
+                    EnsurePlaySlots(player, cards.Count);
+                    List<GameObject> slots = _playCards[player];
+                    float startX = -(cards.Count - 1) * TableSpacing * 0.5f;
+                    for (int i = 0; i < slots.Count; i++)
+                    {
+                        GameObject cardObj = slots[i];
+                        if (i < cards.Count)
+                        {
+                            cardObj.SetActive(true);
+                            RectTransform rect = cardObj.GetComponent<RectTransform>();
+                            rect.sizeDelta = new Vector2(TableCardWidth, TableCardHeight);
+                            rect.anchoredPosition = new Vector2(startX + i * TableSpacing, 0f);
+                            ApplyCardVisual(cardObj.transform, cards[i]);
+                        }
+                        else
+                        {
+                            cardObj.SetActive(false);
+                        }
+                    }
+                }
+                else if (_playCards.TryGetValue(player, out List<GameObject> hidden))
+                {
+                    for (int i = 0; i < hidden.Count; i++)
+                    {
+                        hidden[i].SetActive(false);
+                    }
+                }
+            }
+        }
+
+        private void EnsurePlaySlots(int playerIndex, int count)
+        {
+            if (!_playAreas.TryGetValue(playerIndex, out RectTransform area))
+            {
+                return;
+            }
+
+            if (!_playCards.TryGetValue(playerIndex, out List<GameObject> slots))
+            {
+                slots = new List<GameObject>();
+                _playCards[playerIndex] = slots;
+            }
+
+            while (slots.Count < count)
+            {
+                GameObject card = Instantiate(_refs.CardFacePrefab, area);
+                card.name = $"PlayCard_{playerIndex}_{slots.Count + 1}";
+                slots.Add(card);
+            }
+        }
+
+        private void ClearAllTablePlays()
+        {
+            _lastPlays.Clear();
+            foreach (List<GameObject> cards in _playCards.Values)
+            {
+                for (int i = 0; i < cards.Count; i++)
+                {
+                    cards[i].SetActive(false);
+                }
+            }
+
+            SetPassLabelActive(0, false);
+            SetPassLabelActive(1, false);
+            SetPassLabelActive(2, false);
+        }
+
+        private void ClearPlayerTable(int playerIndex)
+        {
+            _lastPlays.Remove(playerIndex);
+            if (_playCards.TryGetValue(playerIndex, out List<GameObject> slots))
+            {
+                for (int i = 0; i < slots.Count; i++)
+                {
+                    slots[i].SetActive(false);
+                }
+            }
+
+            SetPassLabelActive(playerIndex, false);
+        }
+
+        private void SetPassLabelActive(int playerIndex, bool active)
+        {
+            if (_passLabels.TryGetValue(playerIndex, out Text label))
+            {
+                label.gameObject.SetActive(active);
+            }
+        }
+
+        private void SetBidLabel(int playerIndex, string content, bool active)
+        {
+            if (_bidLabels.TryGetValue(playerIndex, out Text label))
+            {
+                label.text = content;
+                label.gameObject.SetActive(active);
+            }
+        }
+
+        private void ClearAllBidLabels()
+        {
+            foreach (Text label in _bidLabels.Values)
+            {
+                label.gameObject.SetActive(false);
+            }
+        }
+
+        private void CacheBottomCards()
+        {
+            _bottomBacks.Clear();
+            if (_bottomArea == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < _bottomArea.childCount; i++)
+            {
+                _bottomBacks.Add(_bottomArea.GetChild(i).gameObject);
+            }
+        }
+
+        private void EnsureBottomFaceSlots(int count)
+        {
+            if (_refs == null || _refs.CardFacePrefab == null || _bottomArea == null)
+            {
+                return;
+            }
+
+            while (_bottomFaces.Count < count)
+            {
+                GameObject card = Instantiate(_refs.CardFacePrefab, _bottomArea);
+                card.name = $"BottomFace_{_bottomFaces.Count + 1}";
+                RectTransform rect = card.GetComponent<RectTransform>();
+                rect.sizeDelta = new Vector2(56f, 76f);
+                rect.anchoredPosition = new Vector2((_bottomFaces.Count - 1) * 40f, 0f);
+                _bottomFaces.Add(card);
+            }
+        }
+
+        private void ShowBottomBacksOnly()
+        {
+            for (int i = 0; i < _bottomBacks.Count; i++)
+            {
+                _bottomBacks[i].SetActive(true);
+            }
+
+            for (int i = 0; i < _bottomFaces.Count; i++)
+            {
+                _bottomFaces[i].SetActive(false);
+            }
+        }
+
+        private void UpdateBottomCards(bool showFaces, string[] bottomCodes)
+        {
+            if (_bottomArea == null)
+            {
+                return;
+            }
+
+            EnsureBottomFaceSlots(3);
+            if (!showFaces)
+            {
+                ShowBottomBacksOnly();
+                return;
+            }
+
+            for (int i = 0; i < _bottomBacks.Count; i++)
+            {
+                _bottomBacks[i].SetActive(false);
+            }
+
+            List<Card> cards = ParseCards(bottomCodes);
+            for (int i = 0; i < _bottomFaces.Count; i++)
+            {
+                if (i < cards.Count)
+                {
+                    _bottomFaces[i].SetActive(true);
+                    ApplyCardVisual(_bottomFaces[i].transform, cards[i]);
+                }
+                else
+                {
+                    _bottomFaces[i].SetActive(false);
+                }
             }
         }
 
@@ -667,6 +1100,25 @@ namespace Doudizhu.UI
             };
 
             return suit + rank;
+        }
+
+        private static List<Card> ParseCards(string[] codes)
+        {
+            List<Card> cards = new();
+            if (codes == null)
+            {
+                return cards;
+            }
+
+            for (int i = 0; i < codes.Length; i++)
+            {
+                if (TryParseCard(codes[i], out Card card))
+                {
+                    cards.Add(card);
+                }
+            }
+
+            return cards;
         }
 
         private static bool TryParseCard(string code, out Card card)
@@ -919,13 +1371,23 @@ namespace Doudizhu.UI
             public bool[] restartVotes;
             public string currentBidder;
             public string landlord;
+            public BidActionDto[] bidHistory;
             public string currentTurn;
             public int[] handCounts;
+            public string[] bottomCards;
             public string[] lastPlayCards;
             public string[] myHand;
             public string winner;
             public string lastActionPlayer;
             public bool lastActionWasPass;
+        }
+
+        [Serializable]
+        private sealed class BidActionDto
+        {
+            public int playerIndex;
+            public string playerName;
+            public bool callLandlord;
         }
 
         [Serializable]

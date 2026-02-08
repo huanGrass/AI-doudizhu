@@ -619,6 +619,7 @@ public sealed class TableRoomService
         }
 
         string[] lastPlayCards = room.LastPlayCards.Select(SerializeCard).ToArray();
+        string[] bottomCards = room.BottomCards.Select(SerializeCard).ToArray();
 
         return new TableStateDto(
             room.TableId,
@@ -634,6 +635,7 @@ public sealed class TableRoomService
             history,
             currentTurn,
             handCounts,
+            bottomCards,
             lastPlayCards,
             lastPlayPlayer,
             myHand,
@@ -829,6 +831,7 @@ public sealed record TableStateDto(
     BidActionDto[] BidHistory,
     string? CurrentTurn,
     int[] HandCounts,
+    string[] BottomCards,
     string[] LastPlayCards,
     string? LastPlayPlayer,
     string[] MyHand,
