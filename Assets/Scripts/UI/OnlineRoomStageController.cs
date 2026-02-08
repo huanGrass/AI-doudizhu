@@ -54,6 +54,7 @@ namespace Doudizhu.UI
         private int _lastBidHistoryCount;
         private string _lastActionKey = string.Empty;
         private int _lastPhase = -1;
+        private int _stateEpoch;
         private TableStateDto _latestState;
 
         private void Start()
@@ -262,6 +263,7 @@ namespace Doudizhu.UI
 
         private IEnumerator FetchAndApplyState()
         {
+            int fetchEpoch = _stateEpoch;
             string player = UnityWebRequest.EscapeURL(OnlineRoomSession.LocalPlayerName ?? string.Empty);
             string url = $"{OnlineLobbyBridge.ServerBaseUrl}/api/tables/{OnlineRoomSession.TableId}/state?playerName={player}";
             using (UnityWebRequest request = UnityWebRequest.Get(url))
@@ -276,6 +278,11 @@ namespace Doudizhu.UI
                 }
 
                 if (_readyRequesting || _bidRequesting || _playRequesting || _restartRequesting || _leaveRequesting)
+                {
+                    yield break;
+                }
+
+                if (fetchEpoch != _stateEpoch)
                 {
                     yield break;
                 }
@@ -960,6 +967,7 @@ namespace Doudizhu.UI
         private IEnumerator SendReady()
         {
             _readyRequesting = true;
+            _stateEpoch++;
 
             string url = $"{OnlineLobbyBridge.ServerBaseUrl}/api/tables/{OnlineRoomSession.TableId}/ready";
             ReadyRequestDto payload = new()
@@ -984,6 +992,7 @@ namespace Doudizhu.UI
         private IEnumerator SendBid(bool callLandlord)
         {
             _bidRequesting = true;
+            _stateEpoch++;
 
             string url = $"{OnlineLobbyBridge.ServerBaseUrl}/api/tables/{OnlineRoomSession.TableId}/bid";
             BidRequestDto payload = new()
@@ -1022,6 +1031,7 @@ namespace Doudizhu.UI
         private IEnumerator SendPlay(bool pass)
         {
             _playRequesting = true;
+            _stateEpoch++;
 
             bool sendPass = pass;
             string[] selected = Array.Empty<string>();
@@ -1081,6 +1091,7 @@ namespace Doudizhu.UI
         private IEnumerator SendRestart()
         {
             _restartRequesting = true;
+            _stateEpoch++;
             string url = $"{OnlineLobbyBridge.ServerBaseUrl}/api/tables/{OnlineRoomSession.TableId}/restart";
             NameOnlyRequest payload = new() { playerName = OnlineRoomSession.LocalPlayerName };
             byte[] body = Encoding.UTF8.GetBytes(JsonUtility.ToJson(payload));
@@ -1099,6 +1110,7 @@ namespace Doudizhu.UI
         private IEnumerator SendLeave()
         {
             _leaveRequesting = true;
+            _stateEpoch++;
             string url = $"{OnlineLobbyBridge.ServerBaseUrl}/api/tables/{OnlineRoomSession.TableId}/leave";
             NameOnlyRequest payload = new() { playerName = OnlineRoomSession.LocalPlayerName };
             byte[] body = Encoding.UTF8.GetBytes(JsonUtility.ToJson(payload));
