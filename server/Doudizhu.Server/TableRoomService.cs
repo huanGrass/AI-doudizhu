@@ -6,6 +6,7 @@ public sealed class TableRoomService
 {
     private const int MaxPlayersPerTable = 3;
     private static readonly TimeSpan DisconnectTimeout = TimeSpan.FromSeconds(10);
+    private const int MaxRedeal = 3;
 
     private readonly object _gate = new();
     private readonly List<TableRoom> _tables = [new(1), new(2), new(3), new(4)];
@@ -94,7 +95,7 @@ public sealed class TableRoomService
 
             if (room.Phase == TablePhase.WaitingReady && room.Players.Count == MaxPlayersPerTable && room.Players.All(p => p.IsReady))
             {
-                StartBidding(room);
+                StartBidding(room, true);
             }
 
             return new ReadyResult(true, true, true, ToStateDto(room, playerName));
@@ -135,29 +136,8 @@ public sealed class TableRoomService
             }
 
             room.BidSlots[playerIndex] = new BidSlot(true, callLandlord);
-            room.BidHistory.Add(new BidAction(playerIndex, room.Players[playerIndex].Name, callLandlord));
-            if (callLandlord)
-            {
-                room.LandlordIndex = playerIndex;
-            }
-
-            room.BidsTaken++;
-
-            if (room.BidsTaken >= MaxPlayersPerTable)
-            {
-                if (room.LandlordIndex >= 0)
-                {
-                    EnterPlaying(room);
-                }
-                else
-                {
-                    ResetRound(room);
-                }
-            }
-            else
-            {
-                room.CurrentBidderIndex = (playerIndex + 1) % MaxPlayersPerTable;
-            }
+            room.BidHistory.Add(new BidAction(playerIndex, room.Players[playerIndex].Name, callLandlord, room.BidStage));
+            AdvanceBidState(room, playerIndex, callLandlord);
 
             return new BidResult(true, true, true, null, ToStateDto(room, playerName));
         }
@@ -364,7 +344,7 @@ public sealed class TableRoomService
         room.Players[idx].LastSeenUtc = DateTime.UtcNow;
     }
 
-    private static void Housekeep(TableRoom room)
+    private void Housekeep(TableRoom room)
     {
         DateTime now = DateTime.UtcNow;
         for (int i = 0; i < room.Players.Count; i++)
@@ -385,7 +365,7 @@ public sealed class TableRoomService
         }
     }
 
-    private static void AutoBidForDisconnected(TableRoom room)
+    private void AutoBidForDisconnected(TableRoom room)
     {
         if (room.CurrentBidderIndex < 0 || room.CurrentBidderIndex >= room.Players.Count)
         {
@@ -407,25 +387,80 @@ public sealed class TableRoomService
             }
 
             room.BidSlots[idx] = new BidSlot(true, false);
-            room.BidHistory.Add(new BidAction(idx, room.Players[idx].Name, false));
-            room.BidsTaken++;
+            room.BidHistory.Add(new BidAction(idx, room.Players[idx].Name, false, room.BidStage));
+            AdvanceBidState(room, idx, false);
+
+            if (room.Phase != TablePhase.Bidding)
+            {
+                return;
+            }
+        }
+    }
+
+    private void AdvanceBidState(TableRoom room, int bidderIndex, bool callLandlord)
+    {
+        room.BidsTaken++;
+
+        if (room.BidStage == TableBidStage.Call)
+        {
+            if (callLandlord)
+            {
+                if (room.CallPlayer < 0)
+                {
+                    room.CallPlayer = bidderIndex;
+                    room.LandlordIndex = bidderIndex;
+                }
+
+                room.CallCount++;
+            }
 
             if (room.BidsTaken >= MaxPlayersPerTable)
             {
-                if (room.LandlordIndex >= 0)
+                if (room.CallPlayer < 0)
                 {
-                    EnterPlaying(room);
-                }
-                else
-                {
-                    ResetRound(room);
+                    room.RedealCount++;
+                    if (room.RedealCount > MaxRedeal)
+                    {
+                        room.LandlordIndex = 0;
+                        EnterPlaying(room);
+                        return;
+                    }
+
+                    StartBidding(room, false);
+                    return;
                 }
 
+                if (room.CallCount == 1)
+                {
+                    room.LandlordIndex = room.CallPlayer;
+                    EnterPlaying(room);
+                    return;
+                }
+
+                room.BidStage = TableBidStage.Rob;
+                room.BidsTaken = 0;
+                room.RobCount = 0;
+                room.CurrentBidderIndex = (room.CallPlayer + 1) % MaxPlayersPerTable;
                 return;
             }
 
-            room.CurrentBidderIndex = (idx + 1) % MaxPlayersPerTable;
+            room.CurrentBidderIndex = (bidderIndex + 1) % MaxPlayersPerTable;
+            return;
         }
+
+        if (callLandlord)
+        {
+            room.LandlordIndex = bidderIndex;
+            room.RobCount++;
+        }
+
+        if (room.BidsTaken >= 2)
+        {
+            EnterPlaying(room);
+            return;
+        }
+
+        room.CurrentBidderIndex = (bidderIndex + 1) % MaxPlayersPerTable;
     }
 
     private static void AutoPlayForDisconnected(TableRoom room)
@@ -493,14 +528,23 @@ public sealed class TableRoomService
         }
     }
 
-    private void StartBidding(TableRoom room)
+    private void StartBidding(TableRoom room, bool resetRedeal)
     {
+        if (resetRedeal)
+        {
+            room.RedealCount = 0;
+        }
+
         DealCards(room);
 
         room.Phase = TablePhase.Bidding;
+        room.BidStage = TableBidStage.Call;
         room.BidSlots = [new BidSlot(false, false), new BidSlot(false, false), new BidSlot(false, false)];
         room.BidsTaken = 0;
         room.LandlordIndex = -1;
+        room.CallPlayer = -1;
+        room.CallCount = 0;
+        room.RobCount = 0;
         room.BidHistory.Clear();
         room.CurrentBidderIndex = 0;
         room.CurrentTurnIndex = -1;
@@ -508,6 +552,8 @@ public sealed class TableRoomService
         room.LastPlayCards.Clear();
         room.LastPlayPlayerIndex = -1;
         room.PassCount = 0;
+        room.LastActionPlayer = -1;
+        room.LastActionWasPass = false;
     }
 
     private void DealCards(TableRoom room)
@@ -559,6 +605,11 @@ public sealed class TableRoomService
         room.BidsTaken = 0;
         room.BidHistory.Clear();
         room.BidSlots = [new BidSlot(false, false), new BidSlot(false, false), new BidSlot(false, false)];
+        room.BidStage = TableBidStage.Call;
+        room.CallPlayer = -1;
+        room.CallCount = 0;
+        room.RobCount = 0;
+        room.RedealCount = 0;
         room.BottomCards.Clear();
         room.LastPlayCards.Clear();
         room.LastPlayPlayerIndex = -1;
@@ -605,7 +656,7 @@ public sealed class TableRoomService
             : null;
 
         BidActionDto[] history = room.BidHistory
-            .Select(h => new BidActionDto(h.PlayerIndex, h.PlayerName, h.CallLandlord))
+            .Select(h => new BidActionDto(h.PlayerIndex, h.PlayerName, h.CallLandlord, h.BidStage))
             .ToArray();
 
         string[] myHand = [];
@@ -625,6 +676,7 @@ public sealed class TableRoomService
             room.TableId,
             MaxPlayersPerTable,
             room.Phase,
+            room.BidStage,
             players,
             readyStates,
             connectedStates,
@@ -755,6 +807,8 @@ public sealed class TableRoomService
 
         public TablePhase Phase { get; set; } = TablePhase.WaitingReady;
 
+        public TableBidStage BidStage { get; set; } = TableBidStage.Call;
+
         public int CurrentBidderIndex { get; set; } = -1;
 
         public int CurrentTurnIndex { get; set; } = -1;
@@ -764,6 +818,14 @@ public sealed class TableRoomService
         public int WinnerIndex { get; set; } = -1;
 
         public int BidsTaken { get; set; }
+
+        public int CallPlayer { get; set; } = -1;
+
+        public int CallCount { get; set; }
+
+        public int RobCount { get; set; }
+
+        public int RedealCount { get; set; }
 
         public BidSlot[] BidSlots { get; set; }
 
@@ -806,7 +868,7 @@ public sealed class TableRoomService
 
     private readonly record struct BidSlot(bool HasBid, bool CallLandlord);
 
-    private readonly record struct BidAction(int PlayerIndex, string PlayerName, bool CallLandlord);
+    private readonly record struct BidAction(int PlayerIndex, string PlayerName, bool CallLandlord, TableBidStage BidStage);
 }
 
 public enum TablePhase
@@ -817,10 +879,17 @@ public enum TablePhase
     Finished = 3
 }
 
+public enum TableBidStage
+{
+    Call = 0,
+    Rob = 1
+}
+
 public sealed record TableStateDto(
     int TableId,
     int Capacity,
     TablePhase Phase,
+    TableBidStage BidStage,
     string[] Players,
     bool[] ReadyStates,
     bool[] ConnectedStates,
@@ -839,7 +908,7 @@ public sealed record TableStateDto(
     string? LastActionPlayer,
     bool LastActionWasPass);
 
-public sealed record BidActionDto(int PlayerIndex, string PlayerName, bool CallLandlord);
+public sealed record BidActionDto(int PlayerIndex, string PlayerName, bool CallLandlord, TableBidStage BidStage);
 
 public sealed record TableStateResult(bool Exists, TableStateDto? State);
 

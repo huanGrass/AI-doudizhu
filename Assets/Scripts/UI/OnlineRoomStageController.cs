@@ -13,7 +13,7 @@ namespace Doudizhu.UI
 {
     public sealed class OnlineRoomStageController : MonoBehaviour
     {
-        private const float RefreshInterval = 0.8f;
+        private const float RefreshInterval = 0.25f;
         private const float HandSpacing = 28f;
         private const float HandCardWidth = 64f;
         private const float HandCardHeight = 92f;
@@ -183,11 +183,6 @@ namespace Doudizhu.UI
                     }
                 });
 
-                Text noText = _bidNoButton.GetComponentInChildren<Text>();
-                if (noText != null)
-                {
-                    noText.text = "不叫";
-                }
             }
 
             if (_bidYesButton != null)
@@ -201,11 +196,6 @@ namespace Doudizhu.UI
                     }
                 });
 
-                Text yesText = _bidYesButton.GetComponentInChildren<Text>();
-                if (yesText != null)
-                {
-                    yesText.text = "叫地主";
-                }
             }
         }
 
@@ -258,7 +248,7 @@ namespace Doudizhu.UI
             while (true)
             {
                 yield return FetchAndApplyState();
-                yield return new WaitForSeconds(RefreshInterval);
+                yield return new WaitForSecondsRealtime(RefreshInterval);
             }
         }
 
@@ -343,11 +333,15 @@ namespace Doudizhu.UI
 
             if (state.phase == 1)
             {
+                bool isRobStage = state.bidStage == (int)TableBidStage.Rob;
                 string currentBidder = string.IsNullOrWhiteSpace(state.currentBidder) ? "-" : state.currentBidder;
-                SetText("TopBar/Status", $"联机房间 | 桌子 {state.tableId} | 叫地主中");
-                SetText("TableArea/CenterTip", $"轮到 {currentBidder} 叫地主");
+                string stageText = isRobStage ? "抢地主中" : "叫地主中";
+                string actionText = isRobStage ? "抢地主" : "叫地主";
+                SetText("TopBar/Status", $"联机房间 | 桌子 {state.tableId} | {stageText}");
+                SetText("TableArea/CenterTip", $"轮到 {currentBidder} {actionText}");
 
                 bool myTurn = string.Equals(state.currentBidder, OnlineRoomSession.LocalPlayerName, StringComparison.Ordinal);
+                UpdateBidButtonLabels(isRobStage);
                 SetNodeActive("TableArea/BidBar", myTurn);
                 SetNodeActive("TableArea/ActionBar", false);
                 SetNodeActive("TableArea/RestartButton", false);
@@ -451,12 +445,34 @@ namespace Doudizhu.UI
                     continue;
                 }
 
-                SetBidLabel(idx, bid.callLandlord ? "叫地主" : "不叫", true);
+                bool isRobStage = bid.bidStage == (int)TableBidStage.Rob;
+                SetBidLabel(idx, bid.callLandlord ? (isRobStage ? "抢地主" : "叫地主") : (isRobStage ? "不抢" : "不叫"), true);
                 StepResult step = new StepResult(GamePhase.Bidding, StepKind.Bid, idx, bid.callLandlord ? 1 : 0, PlayAction.Pass(), -1);
-                DoudizhuAudioManager.Instance?.PlayStep(step, BidStage.Call, null);
+                DoudizhuAudioManager.Instance?.PlayStep(step, isRobStage ? BidStage.Rob : BidStage.Call, null);
             }
 
             _lastBidHistoryCount = history.Length;
+        }
+
+        private void UpdateBidButtonLabels(bool isRobStage)
+        {
+            if (_bidNoButton != null)
+            {
+                Text noText = _bidNoButton.GetComponentInChildren<Text>();
+                if (noText != null)
+                {
+                    noText.text = isRobStage ? "不抢" : "不叫";
+                }
+            }
+
+            if (_bidYesButton != null)
+            {
+                Text yesText = _bidYesButton.GetComponentInChildren<Text>();
+                if (yesText != null)
+                {
+                    yesText.text = isRobStage ? "抢地主" : "叫地主";
+                }
+            }
         }
 
         private void ProcessLastAction(TableStateDto state, string[] players)
@@ -1395,6 +1411,7 @@ namespace Doudizhu.UI
             public int tableId;
             public int capacity;
             public int phase;
+            public int bidStage;
             public string[] players;
             public bool[] readyStates;
             public bool[] connectedStates;
@@ -1418,6 +1435,13 @@ namespace Doudizhu.UI
             public int playerIndex;
             public string playerName;
             public bool callLandlord;
+            public int bidStage;
+        }
+
+        private enum TableBidStage
+        {
+            Call = 0,
+            Rob = 1
         }
 
         [Serializable]
