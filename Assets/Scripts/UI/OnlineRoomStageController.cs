@@ -53,6 +53,7 @@ namespace Doudizhu.UI
         private int _lastBidHistoryCount;
         private string _lastActionKey = string.Empty;
         private int _lastPhase = -1;
+        private TableStateDto _latestState;
 
         private void Start()
         {
@@ -279,6 +280,7 @@ namespace Doudizhu.UI
 
         private void ApplyState(TableStateDto state)
         {
+            _latestState = state;
             string[] players = state.players ?? Array.Empty<string>();
             bool[] readyStates = state.readyStates ?? Array.Empty<bool>();
             bool[] connectedStates = state.connectedStates ?? Array.Empty<bool>();
@@ -387,6 +389,11 @@ namespace Doudizhu.UI
                 if (_hintButton != null)
                 {
                     _hintButton.interactable = myTurn;
+                }
+
+                if (myTurn && !HasPlayableResponse())
+                {
+                    SetText("TableArea/CenterTip", "没有牌能打过上家");
                 }
 
                 return;
@@ -543,7 +550,7 @@ namespace Doudizhu.UI
             PlayAction hint = PlayRules.FindAutoPlay(new List<Card>(_currentHandCards), lastPlay);
             if (hint.Type == PlayType.Pass || hint.Cards.Count == 0)
             {
-                SetText("TableArea/CenterTip", "没有牌能大过对方");
+                SetText("TableArea/CenterTip", "没有牌能打过上家");
                 return;
             }
 
@@ -985,8 +992,8 @@ namespace Doudizhu.UI
 
                 if (request.result != UnityWebRequest.Result.Success)
                 {
-                    string err = string.IsNullOrWhiteSpace(request.error) ? $"HTTP {request.responseCode}" : request.error;
-                    SetText("TopBar/Status", $"联机房间 | 叫地主失败: {err}");
+                    string err = GetRequestError(request);
+                    SetText("TopBar/Status", $"联机房间 | 叫抢地主失败: {err}");
                 }
                 else
                 {
@@ -1005,11 +1012,11 @@ namespace Doudizhu.UI
         {
             _playRequesting = true;
 
+            bool sendPass = pass;
             string[] selected = Array.Empty<string>();
-            if (!pass)
+            if (!sendPass)
             {
-                selected = GetSelectedCardCodes();
-                if (selected.Length == 0)
+                if (!TryBuildPlayableRequest(out sendPass, out selected))
                 {
                     _playRequesting = false;
                     yield break;
@@ -1020,7 +1027,7 @@ namespace Doudizhu.UI
             PlayRequestDto payload = new()
             {
                 playerName = OnlineRoomSession.LocalPlayerName,
-                pass = pass,
+                pass = sendPass,
                 cards = selected
             };
 
@@ -1035,7 +1042,7 @@ namespace Doudizhu.UI
 
                 if (request.result != UnityWebRequest.Result.Success)
                 {
-                    string err = string.IsNullOrWhiteSpace(request.error) ? $"HTTP {request.responseCode}" : request.error;
+                    string err = GetRequestError(request);
                     SetText("TopBar/Status", $"联机房间 | 出牌失败: {err}");
                     _playRequesting = false;
                     yield break;
@@ -1048,7 +1055,7 @@ namespace Doudizhu.UI
                 }
             }
 
-            if (!pass)
+            if (!sendPass)
             {
                 _selectedIndices.Clear();
                 if (_playButton != null)
@@ -1120,6 +1127,107 @@ namespace Doudizhu.UI
             }
 
             return result.ToArray();
+        }
+
+        private bool TryBuildPlayableRequest(out bool pass, out string[] cards)
+        {
+            pass = false;
+            cards = Array.Empty<string>();
+
+            string[] selectedCodes = GetSelectedCardCodes();
+            if (selectedCodes.Length == 0)
+            {
+                return false;
+            }
+
+            List<Card> selectedCards = ParseCards(selectedCodes);
+            if (selectedCards.Count != selectedCodes.Length)
+            {
+                return false;
+            }
+
+            PlayAction? lastPlay = GetCurrentLastPlay();
+            bool validSelection = PlayRules.TryEvaluate(selectedCards, out PlayPattern currentPattern);
+            if (validSelection && lastPlay.HasValue && lastPlay.Value.Type != PlayType.Pass)
+            {
+                validSelection = PlayRules.TryEvaluate(lastPlay.Value.Cards, out PlayPattern lastPattern)
+                    && PlayRules.CanBeat(currentPattern, lastPattern);
+            }
+
+            if (validSelection)
+            {
+                cards = selectedCodes;
+                return true;
+            }
+
+            PlayAction auto = PlayRules.FindAutoPlay(new List<Card>(_currentHandCards), lastPlay);
+            if (auto.Type == PlayType.Pass || auto.Cards.Count == 0)
+            {
+                if (lastPlay.HasValue && lastPlay.Value.Type != PlayType.Pass)
+                {
+                    pass = true;
+                    cards = Array.Empty<string>();
+                    return true;
+                }
+
+                return false;
+            }
+
+            cards = new string[auto.Cards.Count];
+            for (int i = 0; i < auto.Cards.Count; i++)
+            {
+                cards[i] = SerializeCard(auto.Cards[i]);
+            }
+
+            return true;
+        }
+
+        private PlayAction? GetCurrentLastPlay()
+        {
+            if (_latestState?.lastPlayCards == null || _latestState.lastPlayCards.Length == 0)
+            {
+                return null;
+            }
+
+            List<Card> cards = ParseCards(_latestState.lastPlayCards);
+            if (cards.Count == 0)
+            {
+                return null;
+            }
+
+            return PlayAction.FromCards(cards);
+        }
+
+        private bool HasPlayableResponse()
+        {
+            PlayAction? lastPlay = GetCurrentLastPlay();
+            if (!lastPlay.HasValue || lastPlay.Value.Type == PlayType.Pass)
+            {
+                return true;
+            }
+
+            PlayAction action = PlayRules.FindAutoPlay(new List<Card>(_currentHandCards), lastPlay);
+            return action.Type != PlayType.Pass && action.Cards.Count > 0;
+        }
+
+        private static string GetRequestError(UnityWebRequest request)
+        {
+            if (request == null)
+            {
+                return "未知错误";
+            }
+
+            string text = request.downloadHandler?.text;
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                ErrorResponseDto dto = JsonUtility.FromJson<ErrorResponseDto>(text);
+                if (dto != null && !string.IsNullOrWhiteSpace(dto.error))
+                {
+                    return dto.error;
+                }
+            }
+
+            return string.IsNullOrWhiteSpace(request.error) ? $"HTTP {request.responseCode}" : request.error;
         }
 
         private static string SerializeCard(Card card)
@@ -1470,6 +1578,12 @@ namespace Doudizhu.UI
         private sealed class NameOnlyRequest
         {
             public string playerName;
+        }
+
+        [Serializable]
+        private sealed class ErrorResponseDto
+        {
+            public string error;
         }
     }
 }
