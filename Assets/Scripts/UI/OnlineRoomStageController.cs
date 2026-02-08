@@ -372,6 +372,7 @@ namespace Doudizhu.UI
                 SetNodeActive("TableArea/RestartButton", false);
                 SetNodeActive("HandArea", true);
                 SetNodeActive("BottomCards", true);
+                ClearAllBidLabels();
 
                 if (!myTurn)
                 {
@@ -405,6 +406,7 @@ namespace Doudizhu.UI
             SetNodeActive("TableArea/RestartButton", true);
             SetNodeActive("HandArea", true);
             SetNodeActive("BottomCards", true);
+            ClearAllBidLabels();
             if (_restartButton != null && localInTable)
             {
                 bool[] votes = state.restartVotes ?? Array.Empty<bool>();
@@ -498,7 +500,7 @@ namespace Doudizhu.UI
                 return;
             }
 
-            ClearPlayerTable(idx);
+            ClearAllTablePlays();
             _lastPlays[idx] = parsed;
             SetPassLabelActive(idx, false);
             StepResult playStep = new StepResult(GamePhase.Playing, StepKind.Play, idx, 0, PlayAction.FromCards(new List<Card>(parsed)), -1);
@@ -964,6 +966,20 @@ namespace Doudizhu.UI
                 request.timeout = 4;
                 request.SetRequestHeader("Content-Type", "application/json");
                 yield return request.SendWebRequest();
+
+                if (request.result != UnityWebRequest.Result.Success)
+                {
+                    string err = string.IsNullOrWhiteSpace(request.error) ? $"HTTP {request.responseCode}" : request.error;
+                    SetText("TopBar/Status", $"联机房间 | 叫地主失败: {err}");
+                }
+                else
+                {
+                    TableStateDto state = JsonUtility.FromJson<TableStateDto>(request.downloadHandler.text);
+                    if (state != null)
+                    {
+                        ApplyState(state);
+                    }
+                }
             }
 
             _bidRequesting = false;
@@ -1000,6 +1016,20 @@ namespace Doudizhu.UI
                 request.timeout = 4;
                 request.SetRequestHeader("Content-Type", "application/json");
                 yield return request.SendWebRequest();
+
+                if (request.result != UnityWebRequest.Result.Success)
+                {
+                    string err = string.IsNullOrWhiteSpace(request.error) ? $"HTTP {request.responseCode}" : request.error;
+                    SetText("TopBar/Status", $"联机房间 | 出牌失败: {err}");
+                    _playRequesting = false;
+                    yield break;
+                }
+
+                TableStateDto state = JsonUtility.FromJson<TableStateDto>(request.downloadHandler.text);
+                if (state != null)
+                {
+                    ApplyState(state);
+                }
             }
 
             if (!pass)
