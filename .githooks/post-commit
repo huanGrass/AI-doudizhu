@@ -1,4 +1,4 @@
-﻿#!/bin/sh
+#!/bin/sh
 # 客户端改动后自动同步镜像并打调试包
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
