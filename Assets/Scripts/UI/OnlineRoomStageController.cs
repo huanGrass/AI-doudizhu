@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Text;
+using Doudizhu.Game;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.UI;
@@ -11,6 +12,9 @@ namespace Doudizhu.UI
     public sealed class OnlineRoomStageController : MonoBehaviour
     {
         private const float RefreshInterval = 0.8f;
+        private const float HandSpacing = 28f;
+        private const float HandCardWidth = 64f;
+        private const float HandCardHeight = 92f;
 
         private bool _readyRequesting;
         private bool _bidRequesting;
@@ -22,8 +26,17 @@ namespace Doudizhu.UI
         private Button _passButton;
         private Button _hintButton;
 
+        private Transform _handArea;
+        private DoudizhuUiRefs _refs;
+        private readonly List<GameObject> _handCards = new();
+        private readonly List<Card> _currentHandCards = new();
+        private readonly HashSet<int> _selectedIndices = new();
+
         private void Start()
         {
+            _refs = GetComponent<DoudizhuUiRefs>();
+            _handArea = transform.Find("HandArea");
+
             ApplyRoomWaitingStage();
             BindBidButtons();
             BindActionButtons();
@@ -184,7 +197,7 @@ namespace Doudizhu.UI
             OnlineRoomSession.ReplacePlayers(players);
 
             RefreshSeats(players, readyStates, handCounts);
-            UpdateHandLabel(state.myHand ?? Array.Empty<string>());
+            UpdateHandCards(state.myHand ?? Array.Empty<string>());
 
             int localIndex = FindPlayerIndex(players, OnlineRoomSession.LocalPlayerName);
             bool localInTable = localIndex >= 0;
@@ -230,9 +243,21 @@ namespace Doudizhu.UI
                 bool myTurn = string.Equals(state.currentTurn, OnlineRoomSession.LocalPlayerName, StringComparison.Ordinal);
                 SetNodeActive("TableArea/BidBar", false);
                 SetNodeActive("TableArea/ActionBar", myTurn);
+
+                if (!myTurn)
+                {
+                    _selectedIndices.Clear();
+                    RefreshHandVisual();
+                }
+
+                if (_playButton != null)
+                {
+                    _playButton.interactable = myTurn && _selectedIndices.Count > 0;
+                }
+
                 if (_passButton != null)
                 {
-                    _passButton.interactable = state.lastPlayCards != null && state.lastPlayCards.Length > 0;
+                    _passButton.interactable = myTurn && state.lastPlayCards != null && state.lastPlayCards.Length > 0;
                 }
 
                 return;
@@ -243,6 +268,8 @@ namespace Doudizhu.UI
             SetText("TableArea/CenterTip", $"胜者: {winner}");
             SetNodeActive("TableArea/BidBar", false);
             SetNodeActive("TableArea/ActionBar", false);
+            _selectedIndices.Clear();
+            RefreshHandVisual();
         }
 
         private static string BuildLastPlayText(TableStateDto state)
@@ -261,15 +288,114 @@ namespace Doudizhu.UI
             return "等待出牌";
         }
 
-        private void UpdateHandLabel(string[] myHand)
+        private void UpdateHandCards(string[] handCodes)
         {
-            if (myHand.Length == 0)
+            _currentHandCards.Clear();
+            for (int i = 0; i < handCodes.Length; i++)
             {
-                SetText("HandArea/HandLabel", "你的手牌");
+                if (TryParseCard(handCodes[i], out Card card))
+                {
+                    _currentHandCards.Add(card);
+                }
+            }
+
+            List<int> invalid = new();
+            foreach (int idx in _selectedIndices)
+            {
+                if (idx < 0 || idx >= _currentHandCards.Count)
+                {
+                    invalid.Add(idx);
+                }
+            }
+
+            for (int i = 0; i < invalid.Count; i++)
+            {
+                _selectedIndices.Remove(invalid[i]);
+            }
+
+            RefreshHandVisual();
+        }
+
+        private void RefreshHandVisual()
+        {
+            if (_handArea == null || _refs == null)
+            {
+                SetText("HandArea/HandLabel", $"你的手牌({_currentHandCards.Count})");
                 return;
             }
 
-            SetText("HandArea/HandLabel", $"你的手牌({myHand.Length}): {string.Join(" ", myHand)}");
+            EnsureHandSlots(_currentHandCards.Count);
+            float startX = -(_currentHandCards.Count - 1) * HandSpacing * 0.5f;
+
+            for (int i = 0; i < _handCards.Count; i++)
+            {
+                GameObject cardObj = _handCards[i];
+                if (i < _currentHandCards.Count)
+                {
+                    cardObj.SetActive(true);
+                    RectTransform rect = cardObj.GetComponent<RectTransform>();
+                    rect.sizeDelta = new Vector2(HandCardWidth, HandCardHeight);
+                    float y = 10f + (_selectedIndices.Contains(i) ? 20f : 0f);
+                    rect.anchoredPosition = new Vector2(startX + i * HandSpacing, y);
+                    ApplyCardVisual(cardObj.transform, _currentHandCards[i]);
+
+                    Button button = cardObj.GetComponent<Button>();
+                    if (button == null)
+                    {
+                        button = cardObj.AddComponent<Button>();
+                    }
+
+                    button.onClick.RemoveAllListeners();
+                    int captured = i;
+                    button.onClick.AddListener(() => ToggleSelection(captured));
+                }
+                else
+                {
+                    cardObj.SetActive(false);
+                }
+            }
+
+            SetText("HandArea/HandLabel", $"你的手牌({_currentHandCards.Count})");
+        }
+
+        private void EnsureHandSlots(int count)
+        {
+            if (_refs.CardFacePrefab == null)
+            {
+                return;
+            }
+
+            while (_handCards.Count < count)
+            {
+                GameObject card = Instantiate(_refs.CardFacePrefab, _handArea);
+                card.name = $"OnlineHandCard_{_handCards.Count + 1}";
+                _handCards.Add(card);
+            }
+        }
+
+        private void ToggleSelection(int index)
+        {
+            Transform actionBar = transform.Find("TableArea/ActionBar") ?? transform.Find("ActionBar");
+            if (actionBar == null || !actionBar.gameObject.activeInHierarchy)
+            {
+                return;
+            }
+
+            if (_selectedIndices.Contains(index))
+            {
+                _selectedIndices.Remove(index);
+            }
+            else
+            {
+                _selectedIndices.Add(index);
+            }
+
+            if (_playButton != null)
+            {
+                _playButton.interactable = _selectedIndices.Count > 0;
+            }
+
+            RefreshHandVisual();
         }
 
         private IEnumerator SendReady()
@@ -324,11 +450,23 @@ namespace Doudizhu.UI
         {
             _playRequesting = true;
 
+            string[] selected = Array.Empty<string>();
+            if (!pass)
+            {
+                selected = GetSelectedCardCodes();
+                if (selected.Length == 0)
+                {
+                    _playRequesting = false;
+                    yield break;
+                }
+            }
+
             string url = $"{OnlineLobbyBridge.ServerBaseUrl}/api/tables/{OnlineRoomSession.TableId}/play";
             PlayRequestDto payload = new()
             {
                 playerName = OnlineRoomSession.LocalPlayerName,
-                pass = pass
+                pass = pass,
+                cards = selected
             };
 
             byte[] body = Encoding.UTF8.GetBytes(JsonUtility.ToJson(payload));
@@ -341,7 +479,200 @@ namespace Doudizhu.UI
                 yield return request.SendWebRequest();
             }
 
+            if (!pass)
+            {
+                _selectedIndices.Clear();
+                if (_playButton != null)
+                {
+                    _playButton.interactable = false;
+                }
+            }
+
             _playRequesting = false;
+        }
+
+        private string[] GetSelectedCardCodes()
+        {
+            List<int> indices = new(_selectedIndices);
+            indices.Sort();
+            List<string> result = new(indices.Count);
+            for (int i = 0; i < indices.Count; i++)
+            {
+                int idx = indices[i];
+                if (idx >= 0 && idx < _currentHandCards.Count)
+                {
+                    result.Add(SerializeCard(_currentHandCards[idx]));
+                }
+            }
+
+            return result.ToArray();
+        }
+
+        private static string SerializeCard(Card card)
+        {
+            string rank = card.Rank switch
+            {
+                CardRank.JokerSmall => "SJ",
+                CardRank.JokerBig => "BJ",
+                CardRank.Jack => "J",
+                CardRank.Queen => "Q",
+                CardRank.King => "K",
+                CardRank.Ace => "A",
+                CardRank.Two => "2",
+                _ => ((int)card.Rank).ToString()
+            };
+
+            string suit = card.Suit switch
+            {
+                CardSuit.Spade => "S",
+                CardSuit.Heart => "H",
+                CardSuit.Club => "C",
+                CardSuit.Diamond => "D",
+                _ => string.Empty
+            };
+
+            return suit + rank;
+        }
+
+        private static bool TryParseCard(string code, out Card card)
+        {
+            card = default;
+            if (string.IsNullOrWhiteSpace(code))
+            {
+                return false;
+            }
+
+            string input = code.Trim().ToUpperInvariant();
+            if (input == "SJ")
+            {
+                card = new Card(CardSuit.Joker, CardRank.JokerSmall);
+                return true;
+            }
+
+            if (input == "BJ")
+            {
+                card = new Card(CardSuit.Joker, CardRank.JokerBig);
+                return true;
+            }
+
+            if (input.Length < 2)
+            {
+                return false;
+            }
+
+            CardSuit suit = input[0] switch
+            {
+                'S' => CardSuit.Spade,
+                'H' => CardSuit.Heart,
+                'C' => CardSuit.Club,
+                'D' => CardSuit.Diamond,
+                _ => CardSuit.Joker
+            };
+            if (suit == CardSuit.Joker)
+            {
+                return false;
+            }
+
+            string rankText = input[1..];
+            CardRank rank = rankText switch
+            {
+                "A" => CardRank.Ace,
+                "K" => CardRank.King,
+                "Q" => CardRank.Queen,
+                "J" => CardRank.Jack,
+                "2" => CardRank.Two,
+                "10" => CardRank.Ten,
+                "9" => CardRank.Nine,
+                "8" => CardRank.Eight,
+                "7" => CardRank.Seven,
+                "6" => CardRank.Six,
+                "5" => CardRank.Five,
+                "4" => CardRank.Four,
+                "3" => CardRank.Three,
+                _ => 0
+            };
+
+            if (rank == 0)
+            {
+                return false;
+            }
+
+            card = new Card(suit, rank);
+            return true;
+        }
+
+        private void ApplyCardVisual(Transform card, Card data)
+        {
+            Image rank = card.Find("Rank")?.GetComponent<Image>();
+            Image suit = card.Find("Suit")?.GetComponent<Image>();
+            Image center = card.Find("Center")?.GetComponent<Image>();
+
+            if (data.Rank == CardRank.JokerSmall || data.Rank == CardRank.JokerBig)
+            {
+                if (rank != null) rank.sprite = _refs.Joker;
+                if (center != null) center.sprite = data.Rank == CardRank.JokerSmall ? _refs.SmallJoker : _refs.BigJoker;
+                if (suit != null) suit.sprite = null;
+            }
+            else
+            {
+                if (rank != null) rank.sprite = _refs.GetRankSprite(data.Rank);
+                if (suit != null) suit.sprite = _refs.GetSuitSprite(data.Suit);
+                if (center != null) center.sprite = _refs.GetSuitSprite(data.Suit);
+            }
+
+            if (rank != null) rank.preserveAspect = true;
+            if (suit != null) suit.preserveAspect = true;
+            if (center != null) center.preserveAspect = true;
+            if (suit != null) suit.enabled = suit.sprite != null;
+            if (center != null) center.enabled = center.sprite != null;
+
+            if (rank != null)
+            {
+                RectTransform rect = rank.GetComponent<RectTransform>();
+                if (data.Rank == CardRank.JokerSmall || data.Rank == CardRank.JokerBig)
+                {
+                    rect.sizeDelta = new Vector2(20f, 52f);
+                    rect.anchoredPosition = new Vector2(8f, -6f);
+                }
+                else
+                {
+                    float width = data.Rank == CardRank.Ten ? 32f : 22f;
+                    rect.sizeDelta = new Vector2(width, 22f);
+                    rect.anchoredPosition = new Vector2(6f, -6f);
+                }
+
+                rank.color = GetRankColor(data);
+            }
+
+            if (suit != null)
+            {
+                suit.color = Color.white;
+                RectTransform suitRect = suit.GetComponent<RectTransform>();
+                suitRect.anchoredPosition = new Vector2(10f, -34f);
+            }
+
+            if (center != null)
+            {
+                RectTransform centerRect = center.GetComponent<RectTransform>();
+                centerRect.sizeDelta = data.Rank == CardRank.JokerSmall || data.Rank == CardRank.JokerBig
+                    ? new Vector2(48f, 48f)
+                    : new Vector2(36f, 36f);
+            }
+        }
+
+        private static Color GetRankColor(Card data)
+        {
+            if (data.Rank == CardRank.JokerSmall)
+            {
+                return new Color(0.12f, 0.22f, 0.86f, 1f);
+            }
+
+            if (data.Suit == CardSuit.Spade || data.Suit == CardSuit.Club)
+            {
+                return new Color(0.12f, 0.14f, 0.18f, 1f);
+            }
+
+            return new Color(0.8f, 0.16f, 0.18f, 1f);
         }
 
         private void RefreshSeats(string[] players, bool[] readyStates, int[] handCounts)
@@ -354,7 +685,7 @@ namespace Doudizhu.UI
 
             SetPanel("PlayerPanel_Bottom", localName, true, ResolveReadyForPlayer(players, readyStates, localName), ResolveHandCountForPlayer(players, handCounts, localName));
 
-            List<string> others = new List<string>();
+            List<string> others = new();
             for (int i = 0; i < players.Length; i++)
             {
                 if (!string.Equals(players[i], localName, StringComparison.Ordinal))
@@ -448,7 +779,6 @@ namespace Doudizhu.UI
             public string currentTurn;
             public int[] handCounts;
             public string[] lastPlayCards;
-            public string lastPlayPlayer;
             public string[] myHand;
             public string winner;
             public string lastActionPlayer;
@@ -474,6 +804,7 @@ namespace Doudizhu.UI
         {
             public string playerName;
             public bool pass;
+            public string[] cards;
         }
     }
 }

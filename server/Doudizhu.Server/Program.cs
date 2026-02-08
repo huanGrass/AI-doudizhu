@@ -113,7 +113,7 @@ app.MapPost("/api/tables/{tableId:int}/play", (int tableId, PlayRequest request,
         return Results.BadRequest(new ErrorResponse("playerName is required."));
     }
 
-    PlayResult result = service.SubmitPlay(tableId, request.PlayerName.Trim(), request.Pass);
+    PlayResult result = service.SubmitPlay(tableId, request.PlayerName.Trim(), request.Pass, request.Cards);
     if (!result.Exists)
     {
         return Results.NotFound(new ErrorResponse("table not found."));

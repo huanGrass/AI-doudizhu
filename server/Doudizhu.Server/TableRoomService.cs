@@ -150,7 +150,7 @@ public sealed class TableRoomService
         }
     }
 
-    public PlayResult SubmitPlay(int tableId, string playerName, bool pass)
+    public PlayResult SubmitPlay(int tableId, string playerName, bool pass, string[]? cards)
     {
         lock (_gate)
         {
@@ -202,25 +202,52 @@ public sealed class TableRoomService
                 return new PlayResult(true, true, true, null, ToStateDto(room, playerName));
             }
 
-            PlayAction? last = null;
-            if (room.LastPlayCards.Count > 0)
+            if (cards == null || cards.Length == 0)
             {
-                last = PlayAction.FromCards(new List<Card>(room.LastPlayCards));
+                return new PlayResult(true, true, false, "cards are required", ToStateDto(room, playerName));
+            }
+
+            List<Card> chosenCards = new(cards.Length);
+            for (int i = 0; i < cards.Length; i++)
+            {
+                if (!TryParseCard(cards[i], out Card parsed))
+                {
+                    return new PlayResult(true, true, false, "invalid card format", ToStateDto(room, playerName));
+                }
+
+                chosenCards.Add(parsed);
             }
 
             List<Card> hand = room.Players[playerIndex].Hand;
-            PlayAction action = PlayRules.FindAutoPlay(hand, last);
-            if (action.Type == PlayType.Pass)
+            if (!PlayRules.CardsExistInHand(hand, chosenCards))
             {
-                return new PlayResult(true, true, false, "no playable cards", ToStateDto(room, playerName));
+                return new PlayResult(true, true, false, "cards not in hand", ToStateDto(room, playerName));
             }
 
-            foreach (Card card in action.Cards)
+            if (!PlayRules.TryEvaluate(chosenCards, out PlayPattern currentPattern))
             {
-                hand.Remove(card);
+                return new PlayResult(true, true, false, "invalid play pattern", ToStateDto(room, playerName));
             }
 
-            room.LastPlayCards = new List<Card>(action.Cards);
+            if (room.LastPlayCards.Count > 0)
+            {
+                if (!PlayRules.TryEvaluate(room.LastPlayCards, out PlayPattern lastPattern))
+                {
+                    return new PlayResult(true, true, false, "internal invalid last play", ToStateDto(room, playerName));
+                }
+
+                if (!PlayRules.CanBeat(currentPattern, lastPattern))
+                {
+                    return new PlayResult(true, true, false, "play cannot beat last hand", ToStateDto(room, playerName));
+                }
+            }
+
+            for (int i = 0; i < chosenCards.Count; i++)
+            {
+                hand.Remove(chosenCards[i]);
+            }
+
+            room.LastPlayCards = chosenCards;
             room.LastPlayPlayerIndex = playerIndex;
             room.LastActionPlayer = playerIndex;
             room.LastActionWasPass = false;
@@ -413,6 +440,73 @@ public sealed class TableRoomService
         return suit + rank;
     }
 
+    private static bool TryParseCard(string? value, out Card card)
+    {
+        card = default;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        string input = value.Trim().ToUpperInvariant();
+        if (input == "SJ")
+        {
+            card = new Card(CardSuit.Joker, CardRank.JokerSmall);
+            return true;
+        }
+
+        if (input == "BJ")
+        {
+            card = new Card(CardSuit.Joker, CardRank.JokerBig);
+            return true;
+        }
+
+        if (input.Length < 2)
+        {
+            return false;
+        }
+
+        CardSuit suit = input[0] switch
+        {
+            'S' => CardSuit.Spade,
+            'H' => CardSuit.Heart,
+            'C' => CardSuit.Club,
+            'D' => CardSuit.Diamond,
+            _ => CardSuit.Joker
+        };
+        if (suit == CardSuit.Joker)
+        {
+            return false;
+        }
+
+        string rankText = input[1..];
+        CardRank rank = rankText switch
+        {
+            "A" => CardRank.Ace,
+            "K" => CardRank.King,
+            "Q" => CardRank.Queen,
+            "J" => CardRank.Jack,
+            "2" => CardRank.Two,
+            "10" => CardRank.Ten,
+            "9" => CardRank.Nine,
+            "8" => CardRank.Eight,
+            "7" => CardRank.Seven,
+            "6" => CardRank.Six,
+            "5" => CardRank.Five,
+            "4" => CardRank.Four,
+            "3" => CardRank.Three,
+            _ => 0
+        };
+
+        if (rank == 0)
+        {
+            return false;
+        }
+
+        card = new Card(suit, rank);
+        return true;
+    }
+
     private sealed class TableRoom
     {
         public TableRoom(int tableId)
@@ -517,7 +611,7 @@ public sealed record BidRequest(string PlayerName, bool CallLandlord);
 
 public sealed record BidResult(bool Exists, bool PlayerInTable, bool Success, string? Error, TableStateDto? State);
 
-public sealed record PlayRequest(string PlayerName, bool Pass);
+public sealed record PlayRequest(string PlayerName, bool Pass, string[]? Cards);
 
 public sealed record PlayResult(bool Exists, bool PlayerInTable, bool Success, string? Error, TableStateDto? State);
 
