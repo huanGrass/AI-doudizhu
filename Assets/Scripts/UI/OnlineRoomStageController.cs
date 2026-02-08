@@ -345,7 +345,7 @@ namespace Doudizhu.UI
                 SetNodeActive("TableArea/BidBar", myTurn);
                 SetNodeActive("TableArea/ActionBar", false);
                 SetNodeActive("TableArea/RestartButton", false);
-                SetNodeActive("HandArea", false);
+                SetNodeActive("HandArea", true);
                 SetNodeActive("BottomCards", true);
                 ShowBottomBacksOnly();
                 return;

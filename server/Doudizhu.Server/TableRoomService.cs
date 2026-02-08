@@ -440,6 +440,7 @@ public sealed class TableRoomService
                 room.BidStage = TableBidStage.Rob;
                 room.BidsTaken = 0;
                 room.RobCount = 0;
+                room.BidSlots = [new BidSlot(false, false), new BidSlot(false, false), new BidSlot(false, false)];
                 room.CurrentBidderIndex = (room.CallPlayer + 1) % MaxPlayersPerTable;
                 return;
             }
