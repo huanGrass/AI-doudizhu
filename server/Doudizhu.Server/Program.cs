@@ -132,4 +132,56 @@ app.MapPost("/api/tables/{tableId:int}/play", (int tableId, PlayRequest request,
     return Results.Ok(result.State);
 });
 
+app.MapPost("/api/tables/{tableId:int}/leave", (int tableId, LeaveRequest request, TableRoomService service) =>
+{
+    if (request == null || string.IsNullOrWhiteSpace(request.PlayerName))
+    {
+        return Results.BadRequest(new ErrorResponse("playerName is required."));
+    }
+
+    LeaveResult result = service.LeaveTable(tableId, request.PlayerName.Trim());
+    if (!result.Exists)
+    {
+        return Results.NotFound(new ErrorResponse("table not found."));
+    }
+
+    if (!result.PlayerInTable)
+    {
+        return Results.Conflict(new ErrorResponse("player not in table."));
+    }
+
+    if (!result.Success || result.State == null)
+    {
+        return Results.Conflict(new ErrorResponse("leave failed."));
+    }
+
+    return Results.Ok(result.State);
+});
+
+app.MapPost("/api/tables/{tableId:int}/restart", (int tableId, RestartRequest request, TableRoomService service) =>
+{
+    if (request == null || string.IsNullOrWhiteSpace(request.PlayerName))
+    {
+        return Results.BadRequest(new ErrorResponse("playerName is required."));
+    }
+
+    RestartResult result = service.RequestRestart(tableId, request.PlayerName.Trim());
+    if (!result.Exists)
+    {
+        return Results.NotFound(new ErrorResponse("table not found."));
+    }
+
+    if (!result.PlayerInTable)
+    {
+        return Results.Conflict(new ErrorResponse(result.Error ?? "player not in table."));
+    }
+
+    if (!result.Success || result.State == null)
+    {
+        return Results.Conflict(new ErrorResponse(result.Error ?? "restart failed."));
+    }
+
+    return Results.Ok(result.State);
+});
+
 app.Run();

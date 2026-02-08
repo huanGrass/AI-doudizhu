@@ -5,6 +5,7 @@ namespace Doudizhu.Server;
 public sealed class TableRoomService
 {
     private const int MaxPlayersPerTable = 3;
+    private static readonly TimeSpan DisconnectTimeout = TimeSpan.FromSeconds(10);
 
     private readonly object _gate = new();
     private readonly List<TableRoom> _tables = [new(1), new(2), new(3), new(4)];
@@ -28,6 +29,8 @@ public sealed class TableRoomService
                 return new TableStateResult(false, null);
             }
 
+            TouchPlayer(room, forPlayer);
+            Housekeep(room);
             return new TableStateResult(true, ToStateDto(room, forPlayer));
         }
     }
@@ -42,6 +45,7 @@ public sealed class TableRoomService
                 return new JoinTableResult(false, false, null);
             }
 
+            Housekeep(room);
             int existingIndex = room.Players.FindIndex(p => p.Name.Equals(playerName, StringComparison.OrdinalIgnoreCase));
             bool alreadyInTable = existingIndex >= 0;
             if (!alreadyInTable && room.Players.Count >= MaxPlayersPerTable)
@@ -52,6 +56,11 @@ public sealed class TableRoomService
             if (!alreadyInTable)
             {
                 room.Players.Add(new PlayerSlot(playerName));
+            }
+            else
+            {
+                room.Players[existingIndex].IsConnected = true;
+                room.Players[existingIndex].LastSeenUtc = DateTime.UtcNow;
             }
 
             if (room.Phase == TablePhase.Playing || room.Phase == TablePhase.Finished)
@@ -73,6 +82,8 @@ public sealed class TableRoomService
                 return new ReadyResult(false, false, false, null);
             }
 
+            TouchPlayer(room, playerName);
+            Housekeep(room);
             int index = room.Players.FindIndex(p => p.Name.Equals(playerName, StringComparison.OrdinalIgnoreCase));
             if (index < 0)
             {
@@ -100,6 +111,8 @@ public sealed class TableRoomService
                 return new BidResult(false, false, false, "table not found", null);
             }
 
+            TouchPlayer(room, playerName);
+            Housekeep(room);
             int playerIndex = room.Players.FindIndex(p => p.Name.Equals(playerName, StringComparison.OrdinalIgnoreCase));
             if (playerIndex < 0)
             {
@@ -160,6 +173,8 @@ public sealed class TableRoomService
                 return new PlayResult(false, false, false, "table not found", null);
             }
 
+            TouchPlayer(room, playerName);
+            Housekeep(room);
             int playerIndex = room.Players.FindIndex(p => p.Name.Equals(playerName, StringComparison.OrdinalIgnoreCase));
             if (playerIndex < 0)
             {
@@ -265,9 +280,217 @@ public sealed class TableRoomService
         }
     }
 
+    public LeaveResult LeaveTable(int tableId, string playerName)
+    {
+        lock (_gate)
+        {
+            TableRoom? room = _tables.FirstOrDefault(t => t.TableId == tableId);
+            if (room == null)
+            {
+                return new LeaveResult(false, false, false, null);
+            }
+
+            int index = room.Players.FindIndex(p => p.Name.Equals(playerName, StringComparison.OrdinalIgnoreCase));
+            if (index < 0)
+            {
+                return new LeaveResult(true, false, false, ToStateDto(room, null));
+            }
+
+            room.Players.RemoveAt(index);
+            ResetRound(room);
+            if (room.Players.Count == 0)
+            {
+                room.Phase = TablePhase.WaitingReady;
+            }
+
+            return new LeaveResult(true, true, true, ToStateDto(room, null));
+        }
+    }
+
+    public RestartResult RequestRestart(int tableId, string playerName)
+    {
+        lock (_gate)
+        {
+            TableRoom? room = _tables.FirstOrDefault(t => t.TableId == tableId);
+            if (room == null)
+            {
+                return new RestartResult(false, false, false, "table not found", null);
+            }
+
+            TouchPlayer(room, playerName);
+            Housekeep(room);
+
+            int index = room.Players.FindIndex(p => p.Name.Equals(playerName, StringComparison.OrdinalIgnoreCase));
+            if (index < 0)
+            {
+                return new RestartResult(true, false, false, "player not in table", ToStateDto(room, playerName));
+            }
+
+            if (room.Phase != TablePhase.Finished)
+            {
+                return new RestartResult(true, true, false, "table is not finished", ToStateDto(room, playerName));
+            }
+
+            room.Players[index].WantsRestart = true;
+            bool allConfirmed = room.Players.Count == MaxPlayersPerTable && room.Players.All(p => p.WantsRestart);
+            if (allConfirmed)
+            {
+                ResetRound(room);
+            }
+
+            return new RestartResult(true, true, true, null, ToStateDto(room, playerName));
+        }
+    }
+
     private static int NextPlayer(int idx)
     {
         return (idx + 1) % MaxPlayersPerTable;
+    }
+
+    private static void TouchPlayer(TableRoom room, string? playerName)
+    {
+        if (string.IsNullOrWhiteSpace(playerName))
+        {
+            return;
+        }
+
+        int idx = room.Players.FindIndex(p => p.Name.Equals(playerName, StringComparison.OrdinalIgnoreCase));
+        if (idx < 0)
+        {
+            return;
+        }
+
+        room.Players[idx].IsConnected = true;
+        room.Players[idx].LastSeenUtc = DateTime.UtcNow;
+    }
+
+    private static void Housekeep(TableRoom room)
+    {
+        DateTime now = DateTime.UtcNow;
+        for (int i = 0; i < room.Players.Count; i++)
+        {
+            if (room.Players[i].IsConnected && now - room.Players[i].LastSeenUtc > DisconnectTimeout)
+            {
+                room.Players[i].IsConnected = false;
+            }
+        }
+
+        if (room.Phase == TablePhase.Bidding)
+        {
+            AutoBidForDisconnected(room);
+        }
+        else if (room.Phase == TablePhase.Playing)
+        {
+            AutoPlayForDisconnected(room);
+        }
+    }
+
+    private static void AutoBidForDisconnected(TableRoom room)
+    {
+        if (room.CurrentBidderIndex < 0 || room.CurrentBidderIndex >= room.Players.Count)
+        {
+            return;
+        }
+
+        for (int safety = 0; safety < MaxPlayersPerTable; safety++)
+        {
+            int idx = room.CurrentBidderIndex;
+            if (idx < 0 || idx >= room.Players.Count || room.Players[idx].IsConnected)
+            {
+                return;
+            }
+
+            if (room.BidSlots[idx].HasBid)
+            {
+                room.CurrentBidderIndex = (idx + 1) % MaxPlayersPerTable;
+                continue;
+            }
+
+            room.BidSlots[idx] = new BidSlot(true, false);
+            room.BidHistory.Add(new BidAction(idx, room.Players[idx].Name, false));
+            room.BidsTaken++;
+
+            if (room.BidsTaken >= MaxPlayersPerTable)
+            {
+                if (room.LandlordIndex >= 0)
+                {
+                    EnterPlaying(room);
+                }
+                else
+                {
+                    ResetRound(room);
+                }
+
+                return;
+            }
+
+            room.CurrentBidderIndex = (idx + 1) % MaxPlayersPerTable;
+        }
+    }
+
+    private static void AutoPlayForDisconnected(TableRoom room)
+    {
+        if (room.CurrentTurnIndex < 0 || room.CurrentTurnIndex >= room.Players.Count)
+        {
+            return;
+        }
+
+        for (int safety = 0; safety < MaxPlayersPerTable; safety++)
+        {
+            int idx = room.CurrentTurnIndex;
+            if (idx < 0 || idx >= room.Players.Count || room.Players[idx].IsConnected)
+            {
+                return;
+            }
+
+            List<Card> hand = room.Players[idx].Hand;
+            PlayAction? last = null;
+            if (room.LastPlayCards.Count > 0)
+            {
+                last = PlayAction.FromCards(new List<Card>(room.LastPlayCards));
+            }
+
+            PlayAction auto = PlayRules.FindAutoPlay(hand, last);
+            if (auto.Type == PlayType.Pass)
+            {
+                room.PassCount++;
+                room.LastActionPlayer = idx;
+                room.LastActionWasPass = true;
+                if (room.PassCount >= 2 && room.LastPlayPlayerIndex >= 0)
+                {
+                    room.PassCount = 0;
+                    room.CurrentTurnIndex = room.LastPlayPlayerIndex;
+                    room.LastPlayCards.Clear();
+                    room.LastPlayPlayerIndex = -1;
+                }
+                else
+                {
+                    room.CurrentTurnIndex = NextPlayer(idx);
+                }
+
+                continue;
+            }
+
+            for (int i = 0; i < auto.Cards.Count; i++)
+            {
+                hand.Remove(auto.Cards[i]);
+            }
+
+            room.LastPlayCards = new List<Card>(auto.Cards);
+            room.LastPlayPlayerIndex = idx;
+            room.LastActionPlayer = idx;
+            room.LastActionWasPass = false;
+            room.PassCount = 0;
+
+            if (hand.Count == 0)
+            {
+                room.WinnerIndex = idx;
+                room.Phase = TablePhase.Finished;
+                return;
+            }
+
+            room.CurrentTurnIndex = NextPlayer(idx);
+        }
     }
 
     private void StartBidding(TableRoom room)
@@ -346,6 +569,7 @@ public sealed class TableRoomService
         for (int i = 0; i < room.Players.Count; i++)
         {
             room.Players[i].IsReady = false;
+            room.Players[i].WantsRestart = false;
             room.Players[i].Hand.Clear();
         }
     }
@@ -359,6 +583,8 @@ public sealed class TableRoomService
     {
         string[] players = room.Players.Select(p => p.Name).ToArray();
         bool[] readyStates = room.Players.Select(p => p.IsReady).ToArray();
+        bool[] connectedStates = room.Players.Select(p => p.IsConnected).ToArray();
+        bool[] restartVotes = room.Players.Select(p => p.WantsRestart).ToArray();
         bool?[] bidChoices = room.BidSlots.Select(slot => slot.HasBid ? (bool?)slot.CallLandlord : null).ToArray();
         int[] handCounts = room.Players.Select(p => p.Hand.Count).ToArray();
 
@@ -400,6 +626,8 @@ public sealed class TableRoomService
             room.Phase,
             players,
             readyStates,
+            connectedStates,
+            restartVotes,
             currentBidder,
             landlord,
             bidChoices,
@@ -558,11 +786,18 @@ public sealed class TableRoomService
         {
             Name = name;
             Hand = [];
+            LastSeenUtc = DateTime.UtcNow;
         }
 
         public string Name { get; }
 
         public bool IsReady { get; set; }
+
+        public bool IsConnected { get; set; } = true;
+
+        public DateTime LastSeenUtc { get; set; }
+
+        public bool WantsRestart { get; set; }
 
         public List<Card> Hand { get; }
     }
@@ -586,6 +821,8 @@ public sealed record TableStateDto(
     TablePhase Phase,
     string[] Players,
     bool[] ReadyStates,
+    bool[] ConnectedStates,
+    bool[] RestartVotes,
     string? CurrentBidder,
     string? Landlord,
     bool?[] BidChoices,
@@ -614,6 +851,14 @@ public sealed record BidResult(bool Exists, bool PlayerInTable, bool Success, st
 public sealed record PlayRequest(string PlayerName, bool Pass, string[]? Cards);
 
 public sealed record PlayResult(bool Exists, bool PlayerInTable, bool Success, string? Error, TableStateDto? State);
+
+public sealed record LeaveRequest(string PlayerName);
+
+public sealed record LeaveResult(bool Exists, bool PlayerInTable, bool Success, TableStateDto? State);
+
+public sealed record RestartRequest(string PlayerName);
+
+public sealed record RestartResult(bool Exists, bool PlayerInTable, bool Success, string? Error, TableStateDto? State);
 
 public sealed record JoinTableRequest(string PlayerName);
 

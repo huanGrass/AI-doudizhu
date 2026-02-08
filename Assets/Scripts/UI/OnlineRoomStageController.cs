@@ -6,6 +6,7 @@ using Doudizhu.Game;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.UI;
+using UnityEngine.SceneManagement;
 
 namespace Doudizhu.UI
 {
@@ -19,12 +20,16 @@ namespace Doudizhu.UI
         private bool _readyRequesting;
         private bool _bidRequesting;
         private bool _playRequesting;
+        private bool _restartRequesting;
+        private bool _leaveRequesting;
 
         private Button _bidNoButton;
         private Button _bidYesButton;
         private Button _playButton;
         private Button _passButton;
         private Button _hintButton;
+        private Button _restartButton;
+        private Button _leaveButton;
 
         private Transform _handArea;
         private DoudizhuUiRefs _refs;
@@ -40,6 +45,8 @@ namespace Doudizhu.UI
             ApplyRoomWaitingStage();
             BindBidButtons();
             BindActionButtons();
+            BindRestartButton();
+            EnsureLeaveButton();
             StartCoroutine(PollStateLoop());
         }
 
@@ -62,7 +69,75 @@ namespace Doudizhu.UI
             SetNodeActive("TableArea/BidBar", false);
 
             SetText("HandArea/HandLabel", "你的手牌");
-            RefreshSeats(Array.Empty<string>(), Array.Empty<bool>(), Array.Empty<int>());
+            RefreshSeats(Array.Empty<string>(), Array.Empty<bool>(), Array.Empty<bool>(), Array.Empty<int>());
+        }
+
+        private void BindRestartButton()
+        {
+            _restartButton = transform.Find("TableArea/RestartButton")?.GetComponent<Button>();
+            if (_restartButton == null)
+            {
+                return;
+            }
+
+            _restartButton.onClick.RemoveAllListeners();
+            _restartButton.onClick.AddListener(() =>
+            {
+                if (!_restartRequesting)
+                {
+                    StartCoroutine(SendRestart());
+                }
+            });
+
+            Text text = _restartButton.GetComponentInChildren<Text>();
+            if (text != null)
+            {
+                text.text = "再来一局";
+            }
+        }
+
+        private void EnsureLeaveButton()
+        {
+            Transform topBar = transform.Find("TopBar");
+            if (topBar == null)
+            {
+                return;
+            }
+
+            GameObject go = new GameObject("LeaveRoomButton", typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(topBar, false);
+            RectTransform rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(1f, 0.5f);
+            rect.anchorMax = new Vector2(1f, 0.5f);
+            rect.pivot = new Vector2(1f, 0.5f);
+            rect.sizeDelta = new Vector2(90f, 32f);
+            rect.anchoredPosition = new Vector2(-320f, 0f);
+
+            Image image = go.GetComponent<Image>();
+            image.color = new Color(0.72f, 0.23f, 0.2f, 1f);
+            _leaveButton = go.GetComponent<Button>();
+            _leaveButton.onClick.RemoveAllListeners();
+            _leaveButton.onClick.AddListener(() =>
+            {
+                if (!_leaveRequesting)
+                {
+                    StartCoroutine(SendLeave());
+                }
+            });
+
+            GameObject labelObj = new GameObject("Label", typeof(RectTransform), typeof(Text));
+            labelObj.transform.SetParent(go.transform, false);
+            RectTransform lr = labelObj.GetComponent<RectTransform>();
+            lr.anchorMin = Vector2.zero;
+            lr.anchorMax = Vector2.one;
+            lr.offsetMin = Vector2.zero;
+            lr.offsetMax = Vector2.zero;
+            Text label = labelObj.GetComponent<Text>();
+            label.text = "离开";
+            label.alignment = TextAnchor.MiddleCenter;
+            label.color = Color.white;
+            label.fontSize = 16;
+            label.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         }
 
         private void BindBidButtons()
@@ -193,10 +268,11 @@ namespace Doudizhu.UI
         {
             string[] players = state.players ?? Array.Empty<string>();
             bool[] readyStates = state.readyStates ?? Array.Empty<bool>();
+            bool[] connectedStates = state.connectedStates ?? Array.Empty<bool>();
             int[] handCounts = state.handCounts ?? Array.Empty<int>();
             OnlineRoomSession.ReplacePlayers(players);
 
-            RefreshSeats(players, readyStates, handCounts);
+            RefreshSeats(players, readyStates, connectedStates, handCounts);
             UpdateHandCards(state.myHand ?? Array.Empty<string>());
 
             int localIndex = FindPlayerIndex(players, OnlineRoomSession.LocalPlayerName);
@@ -210,6 +286,7 @@ namespace Doudizhu.UI
                 SetText("TableArea/CenterTip", "等待玩家准备");
                 SetNodeActive("TableArea/BidBar", false);
                 SetNodeActive("TableArea/ActionBar", false);
+                SetNodeActive("TableArea/RestartButton", false);
 
                 if (localInTable && !localReady && !_readyRequesting)
                 {
@@ -228,6 +305,7 @@ namespace Doudizhu.UI
                 bool myTurn = string.Equals(state.currentBidder, OnlineRoomSession.LocalPlayerName, StringComparison.Ordinal);
                 SetNodeActive("TableArea/BidBar", myTurn);
                 SetNodeActive("TableArea/ActionBar", false);
+                SetNodeActive("TableArea/RestartButton", false);
                 return;
             }
 
@@ -243,6 +321,7 @@ namespace Doudizhu.UI
                 bool myTurn = string.Equals(state.currentTurn, OnlineRoomSession.LocalPlayerName, StringComparison.Ordinal);
                 SetNodeActive("TableArea/BidBar", false);
                 SetNodeActive("TableArea/ActionBar", myTurn);
+                SetNodeActive("TableArea/RestartButton", false);
 
                 if (!myTurn)
                 {
@@ -268,6 +347,13 @@ namespace Doudizhu.UI
             SetText("TableArea/CenterTip", $"胜者: {winner}");
             SetNodeActive("TableArea/BidBar", false);
             SetNodeActive("TableArea/ActionBar", false);
+            SetNodeActive("TableArea/RestartButton", true);
+            if (_restartButton != null && localInTable)
+            {
+                bool[] votes = state.restartVotes ?? Array.Empty<bool>();
+                bool localVoted = localIndex >= 0 && localIndex < votes.Length && votes[localIndex];
+                _restartButton.interactable = !localVoted;
+            }
             _selectedIndices.Clear();
             RefreshHandVisual();
         }
@@ -491,6 +577,46 @@ namespace Doudizhu.UI
             _playRequesting = false;
         }
 
+        private IEnumerator SendRestart()
+        {
+            _restartRequesting = true;
+            string url = $"{OnlineLobbyBridge.ServerBaseUrl}/api/tables/{OnlineRoomSession.TableId}/restart";
+            NameOnlyRequest payload = new() { playerName = OnlineRoomSession.LocalPlayerName };
+            byte[] body = Encoding.UTF8.GetBytes(JsonUtility.ToJson(payload));
+            using (UnityWebRequest request = new UnityWebRequest(url, UnityWebRequest.kHttpVerbPOST))
+            {
+                request.uploadHandler = new UploadHandlerRaw(body);
+                request.downloadHandler = new DownloadHandlerBuffer();
+                request.timeout = 4;
+                request.SetRequestHeader("Content-Type", "application/json");
+                yield return request.SendWebRequest();
+            }
+
+            _restartRequesting = false;
+        }
+
+        private IEnumerator SendLeave()
+        {
+            _leaveRequesting = true;
+            string url = $"{OnlineLobbyBridge.ServerBaseUrl}/api/tables/{OnlineRoomSession.TableId}/leave";
+            NameOnlyRequest payload = new() { playerName = OnlineRoomSession.LocalPlayerName };
+            byte[] body = Encoding.UTF8.GetBytes(JsonUtility.ToJson(payload));
+            using (UnityWebRequest request = new UnityWebRequest(url, UnityWebRequest.kHttpVerbPOST))
+            {
+                request.uploadHandler = new UploadHandlerRaw(body);
+                request.downloadHandler = new DownloadHandlerBuffer();
+                request.timeout = 4;
+                request.SetRequestHeader("Content-Type", "application/json");
+                yield return request.SendWebRequest();
+                if (request.result == UnityWebRequest.Result.Success)
+                {
+                    SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+                }
+            }
+
+            _leaveRequesting = false;
+        }
+
         private string[] GetSelectedCardCodes()
         {
             List<int> indices = new(_selectedIndices);
@@ -675,7 +801,7 @@ namespace Doudizhu.UI
             return new Color(0.8f, 0.16f, 0.18f, 1f);
         }
 
-        private void RefreshSeats(string[] players, bool[] readyStates, int[] handCounts)
+        private void RefreshSeats(string[] players, bool[] readyStates, bool[] connectedStates, int[] handCounts)
         {
             string localName = OnlineRoomSession.LocalPlayerName;
             if (string.IsNullOrWhiteSpace(localName))
@@ -683,7 +809,7 @@ namespace Doudizhu.UI
                 localName = "玩家";
             }
 
-            SetPanel("PlayerPanel_Bottom", localName, true, ResolveReadyForPlayer(players, readyStates, localName), ResolveHandCountForPlayer(players, handCounts, localName));
+            SetPanel("PlayerPanel_Bottom", localName, true, ResolveReadyForPlayer(players, readyStates, localName), ResolveConnectedForPlayer(players, connectedStates, localName), ResolveHandCountForPlayer(players, handCounts, localName));
 
             List<string> others = new();
             for (int i = 0; i < players.Length; i++)
@@ -697,15 +823,15 @@ namespace Doudizhu.UI
             string leftName = others.Count > 0 ? others[0] : "空位";
             string rightName = others.Count > 1 ? others[1] : "空位";
 
-            SetPanel("PlayerPanel_Left", leftName, others.Count > 0, ResolveReadyForPlayer(players, readyStates, leftName), ResolveHandCountForPlayer(players, handCounts, leftName));
-            SetPanel("PlayerPanel_Right", rightName, others.Count > 1, ResolveReadyForPlayer(players, readyStates, rightName), ResolveHandCountForPlayer(players, handCounts, rightName));
+            SetPanel("PlayerPanel_Left", leftName, others.Count > 0, ResolveReadyForPlayer(players, readyStates, leftName), ResolveConnectedForPlayer(players, connectedStates, leftName), ResolveHandCountForPlayer(players, handCounts, leftName));
+            SetPanel("PlayerPanel_Right", rightName, others.Count > 1, ResolveReadyForPlayer(players, readyStates, rightName), ResolveConnectedForPlayer(players, connectedStates, rightName), ResolveHandCountForPlayer(players, handCounts, rightName));
         }
 
-        private void SetPanel(string panelPath, string playerName, bool occupied, bool ready, int handCount)
+        private void SetPanel(string panelPath, string playerName, bool occupied, bool ready, bool connected, int handCount)
         {
             SetText($"{panelPath}/NameText", playerName);
-            SetText($"{panelPath}/CoinText", occupied ? "在线" : "--");
-            SetText($"{panelPath}/RoleText", occupied ? (ready ? "准备" : "未准备") : "空位");
+            SetText($"{panelPath}/CoinText", occupied ? (connected ? "在线" : "离线") : "--");
+            SetText($"{panelPath}/RoleText", occupied ? (connected ? (ready ? "准备" : "未准备") : "离线托管") : "空位");
             SetText($"{panelPath}/CardCountText", occupied && handCount >= 0 ? $"手牌: {handCount}" : string.Empty);
         }
 
@@ -732,6 +858,12 @@ namespace Doudizhu.UI
         {
             int idx = FindPlayerIndex(players, playerName);
             return idx >= 0 && idx < handCounts.Length ? handCounts[idx] : -1;
+        }
+
+        private static bool ResolveConnectedForPlayer(string[] players, bool[] connectedStates, string playerName)
+        {
+            int idx = FindPlayerIndex(players, playerName);
+            return idx >= 0 && idx < connectedStates.Length && connectedStates[idx];
         }
 
         private static int CountReady(bool[] readyStates)
@@ -774,6 +906,8 @@ namespace Doudizhu.UI
             public int phase;
             public string[] players;
             public bool[] readyStates;
+            public bool[] connectedStates;
+            public bool[] restartVotes;
             public string currentBidder;
             public string landlord;
             public string currentTurn;
@@ -805,6 +939,12 @@ namespace Doudizhu.UI
             public string playerName;
             public bool pass;
             public string[] cards;
+        }
+
+        [Serializable]
+        private sealed class NameOnlyRequest
+        {
+            public string playerName;
         }
     }
 }
