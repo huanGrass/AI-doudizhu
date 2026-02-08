@@ -82,6 +82,8 @@ namespace Doudizhu.UI
                 gameController.enabled = false;
             }
 
+            CleanupLegacyHandCards();
+
             SetText("TopBar/Status", $"联机房间 | 桌子 {OnlineRoomSession.TableId}");
             SetText("TableArea/CenterTip", "等待玩家准备");
 
@@ -94,6 +96,29 @@ namespace Doudizhu.UI
 
             SetText("HandArea/HandLabel", "你的手牌");
             RefreshSeats(Array.Empty<string>(), Array.Empty<bool>(), Array.Empty<bool>(), Array.Empty<int>());
+        }
+
+        private void CleanupLegacyHandCards()
+        {
+            if (_handArea == null)
+            {
+                return;
+            }
+
+            List<GameObject> staleCards = new();
+            for (int i = 0; i < _handArea.childCount; i++)
+            {
+                Transform child = _handArea.GetChild(i);
+                if (child != null && child.name.StartsWith("HandCard_", StringComparison.Ordinal))
+                {
+                    staleCards.Add(child.gameObject);
+                }
+            }
+
+            for (int i = 0; i < staleCards.Count; i++)
+            {
+                Destroy(staleCards[i]);
+            }
         }
 
         private void BindRestartButton()
