@@ -15,6 +15,24 @@ namespace Doudizhu.UI
         private const string ResourceRoot = "Art";
 
         private readonly Dictionary<string, Sprite> _rankSprites = new Dictionary<string, Sprite>();
+        private readonly List<TableInfo> _onlineTables = new List<TableInfo>
+        {
+            new TableInfo(1, "阿凯", "丸子"),
+            new TableInfo(2, "小雨"),
+            new TableInfo(3, "老K", "柚子", "羽飞"),
+            new TableInfo(4, "空桌")
+        };
+
+        private Font _font;
+        private Sprite _background;
+        private Sprite _cardBack;
+        private Sprite _joker;
+        private Sprite _smallKing;
+        private Sprite _bigKing;
+        private Sprite _suitDiamond;
+        private Sprite _suitClub;
+        private Sprite _suitHeart;
+        private Sprite _suitSpade;
 
         private void Awake()
         {
@@ -25,22 +43,30 @@ namespace Doudizhu.UI
 
             EnsureMainCamera();
             EnsureAudioManager();
+            EnsureEventSystem();
+            InitializeResources();
 
-            Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            if (font == null)
+            GameObject root = CreateCanvasRoot();
+            BuildStartMenu(root.transform);
+        }
+
+        private void InitializeResources()
+        {
+            _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            if (_font == null)
             {
-                font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                _font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             }
 
-            Sprite background = LoadSprite("背景");
-            Sprite cardBack = LoadSprite("牌底");
-            Sprite joker = LoadSprite("joker");
-            Sprite smallKing = LoadSprite("小王图案");
-            Sprite bigKing = LoadSprite("大王图案");
-            Sprite suitDiamond = LoadSprite("方块");
-            Sprite suitClub = LoadSprite("梅花");
-            Sprite suitHeart = LoadSprite("红桃");
-            Sprite suitSpade = LoadSprite("黑桃");
+            _background = LoadSprite("背景");
+            _cardBack = LoadSprite("牌底");
+            _joker = LoadSprite("joker");
+            _smallKing = LoadSprite("小王图案");
+            _bigKing = LoadSprite("大王图案");
+            _suitDiamond = LoadSprite("方块");
+            _suitClub = LoadSprite("梅花");
+            _suitHeart = LoadSprite("红桃");
+            _suitSpade = LoadSprite("黑桃");
 
             _rankSprites.Clear();
             _rankSprites["A"] = LoadSprite("a");
@@ -56,26 +82,142 @@ namespace Doudizhu.UI
             _rankSprites["J"] = LoadSprite("j");
             _rankSprites["Q"] = LoadSprite("q");
             _rankSprites["K"] = LoadSprite("k");
+        }
 
-            GameObject uiRoot = CreateCanvasRoot();
-            CreateBackground(uiRoot.transform, background);
-            CreateTopBar(uiRoot.transform, font, joker);
-            GameObject tableArea = CreateTableArea(uiRoot.transform, font);
-            CreateBottomCards(uiRoot.transform, cardBack);
-            CreatePlayerPanels(uiRoot.transform, font, smallKing, bigKing, joker);
-            CreateHandArea(uiRoot.transform, font);
-            GameObject actionTemplate = CreateActionButtonTemplate(font);
-            CreateActionBar(tableArea.transform, actionTemplate, font);
-            CreateRestartButton(tableArea.transform, actionTemplate, font);
+        private void BuildStartMenu(Transform root)
+        {
+            CreateBackground(root, _background);
+            CreateTopBar(root, _font, _joker, "请选择模式");
+
+            GameObject modePanel = CreatePanel("ModePanel", root, new Color(0f, 0f, 0f, 0.45f));
+            RectTransform modeRect = modePanel.GetComponent<RectTransform>();
+            SetRect(modeRect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(540f, 340f), new Vector2(0f, 10f));
+
+            Text title = CreateText("ModeTitle", modePanel.transform, "开始游戏", _font, 34, TextAnchor.MiddleCenter, Color.white);
+            RectTransform titleRect = title.GetComponent<RectTransform>();
+            SetRect(titleRect, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(360f, 56f), new Vector2(0f, -36f));
+
+            Text desc = CreateText("ModeDesc", modePanel.transform, "请选择单机对战或联机入桌", _font, 20, TextAnchor.MiddleCenter, new Color(0.86f, 0.92f, 1f, 1f));
+            RectTransform descRect = desc.GetComponent<RectTransform>();
+            SetRect(descRect, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(420f, 36f), new Vector2(0f, -88f));
+
+            Button singleButton = CreateMenuButton(modePanel.transform, "SingleModeButton", "单机模式", new Vector2(0f, -10f), new Color(0.14f, 0.48f, 0.84f, 1f));
+            Button onlineButton = CreateMenuButton(modePanel.transform, "OnlineModeButton", "联机模式", new Vector2(0f, -82f), new Color(0.95f, 0.56f, 0.17f, 1f));
+
+            GameObject lobbyPanel = CreateLobbyPanel(root);
+            lobbyPanel.SetActive(false);
+
+            Text status = root.Find("TopBar/Status")?.GetComponent<Text>();
+            singleButton.onClick.AddListener(() => StartGame(root.gameObject, "单机模式  |  AI房"));
+            onlineButton.onClick.AddListener(() =>
+            {
+                modePanel.SetActive(false);
+                lobbyPanel.SetActive(true);
+                if (status != null)
+                {
+                    status.text = "联机模式  |  请选择桌子";
+                }
+            });
+        }
+
+        private GameObject CreateLobbyPanel(Transform root)
+        {
+            GameObject panel = CreatePanel("LobbyPanel", root, new Color(0.04f, 0.08f, 0.13f, 0.72f));
+            RectTransform panelRect = panel.GetComponent<RectTransform>();
+            SetRect(panelRect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(980f, 560f), new Vector2(0f, -12f));
+
+            Text title = CreateText("LobbyTitle", panel.transform, "联机房间", _font, 30, TextAnchor.MiddleLeft, Color.white);
+            RectTransform titleRect = title.GetComponent<RectTransform>();
+            SetRect(titleRect, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(260f, 48f), new Vector2(36f, -30f));
+
+            Button backButton = CreateMenuButton(panel.transform, "BackToModeButton", "返回", new Vector2(416f, 234f), new Color(0.28f, 0.35f, 0.44f, 1f), 110f, 44f, 18);
+            GameObject modePanel = root.Find("ModePanel")?.gameObject;
+            Text status = root.Find("TopBar/Status")?.GetComponent<Text>();
+            backButton.onClick.AddListener(() =>
+            {
+                panel.SetActive(false);
+                if (modePanel != null)
+                {
+                    modePanel.SetActive(true);
+                }
+
+                if (status != null)
+                {
+                    status.text = "请选择模式";
+                }
+            });
+
+            for (int i = 0; i < _onlineTables.Count; i++)
+            {
+                TableInfo table = _onlineTables[i];
+                GameObject item = CreatePanel($"Table_{table.TableId}", panel.transform, new Color(1f, 1f, 1f, 0.1f));
+                RectTransform itemRect = item.GetComponent<RectTransform>();
+
+                int col = i % 2;
+                int row = i / 2;
+                Vector2 pos = new Vector2(col == 0 ? -230f : 230f, row == 0 ? 90f : -140f);
+                SetRect(itemRect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(430f, 190f), pos);
+
+                Text tableTitle = CreateText("TableTitle", item.transform, $"桌子 {table.TableId}", _font, 24, TextAnchor.UpperLeft, Color.white);
+                RectTransform tableTitleRect = tableTitle.GetComponent<RectTransform>();
+                SetRect(tableTitleRect, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, 1f), new Vector2(-24f, 34f), new Vector2(14f, -12f));
+
+                string playersText = table.Players.Count == 0
+                    ? "暂无玩家"
+                    : string.Join("、", table.Players);
+                Text players = CreateText("Players", item.transform, $"玩家: {playersText}", _font, 18, TextAnchor.UpperLeft, new Color(0.85f, 0.92f, 1f, 1f));
+                RectTransform playersRect = players.GetComponent<RectTransform>();
+                SetRect(playersRect, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, 1f), new Vector2(-24f, 56f), new Vector2(14f, -56f));
+
+                int playerCount = table.Players.Count;
+                if (playerCount == 1 && table.Players[0] == "空桌")
+                {
+                    playerCount = 0;
+                    players.text = "玩家: 暂无玩家";
+                }
+
+                Text seat = CreateText("SeatText", item.transform, $"人数: {playerCount}/3", _font, 17, TextAnchor.UpperLeft, new Color(1f, 0.9f, 0.65f, 1f));
+                RectTransform seatRect = seat.GetComponent<RectTransform>();
+                SetRect(seatRect, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, 1f), new Vector2(-24f, 34f), new Vector2(14f, -116f));
+
+                Button joinButton = CreateMenuButton(item.transform, "JoinButton", "加入对局", new Vector2(0f, -64f), new Color(0.14f, 0.6f, 0.37f, 1f), 150f, 42f, 18);
+                int tableId = table.TableId;
+                joinButton.onClick.AddListener(() => StartGame(root.gameObject, $"联机模式  |  桌子 {tableId}"));
+            }
+
+            return panel;
+        }
+
+        private void StartGame(GameObject currentRoot, string statusText)
+        {
+            if (currentRoot != null)
+            {
+                Object.Destroy(currentRoot);
+            }
+
+            GameObject gameRoot = CreateCanvasRoot();
+            BuildGameTable(gameRoot.transform, statusText);
+            gameRoot.AddComponent<DoudizhuUiController>();
+        }
+
+        private void BuildGameTable(Transform root, string statusText)
+        {
+            CreateBackground(root, _background);
+            CreateTopBar(root, _font, _joker, statusText);
+            GameObject tableArea = CreateTableArea(root, _font);
+            CreateBottomCards(root, _cardBack);
+            CreatePlayerPanels(root, _font, _smallKing, _bigKing, _joker);
+            CreateHandArea(root, _font);
+            GameObject actionTemplate = CreateActionButtonTemplate(_font);
+            CreateActionBar(tableArea.transform, actionTemplate, _font);
+            CreateRestartButton(tableArea.transform, actionTemplate, _font);
 
             GameObject cardFaceTemplate = CreateCardFaceTemplate();
             cardFaceTemplate.SetActive(false);
-            GameObject cardBackTemplate = CreateCardBackTemplate(cardBack);
+            GameObject cardBackTemplate = CreateCardBackTemplate(_cardBack);
             cardBackTemplate.SetActive(false);
 
-            AttachUiRefs(uiRoot, cardFaceTemplate, cardBackTemplate, actionTemplate, background, cardBack, joker, smallKing, bigKing, suitSpade, suitHeart, suitClub, suitDiamond);
-            uiRoot.AddComponent<DoudizhuUiController>();
-            EnsureEventSystem();
+            AttachUiRefs(root.gameObject, cardFaceTemplate, cardBackTemplate, actionTemplate, _background, _cardBack, _joker, _smallKing, _bigKing, _suitSpade, _suitHeart, _suitClub, _suitDiamond);
         }
 
         private static Sprite LoadSprite(string name)
@@ -113,7 +255,7 @@ namespace Doudizhu.UI
             image.preserveAspect = false;
         }
 
-        private static void CreateTopBar(Transform parent, Font font, Sprite joker)
+        private static void CreateTopBar(Transform parent, Font font, Sprite joker, string statusText)
         {
             GameObject bar = CreatePanel("TopBar", parent, new Color(0f, 0f, 0f, 0.35f));
             RectTransform rect = bar.GetComponent<RectTransform>();
@@ -123,13 +265,13 @@ namespace Doudizhu.UI
             RectTransform titleRect = title.GetComponent<RectTransform>();
             SetRect(titleRect, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f), new Vector2(260f, 40f), new Vector2(18f, 0f));
 
-            Text status = CreateText("Status", bar.transform, "房间  |  金币桌", font, 16, TextAnchor.MiddleRight, new Color(0.9f, 0.95f, 1f, 1f));
+            Text status = CreateText("Status", bar.transform, statusText, font, 16, TextAnchor.MiddleRight, new Color(0.9f, 0.95f, 1f, 1f));
             RectTransform statusRect = status.GetComponent<RectTransform>();
-            SetRect(statusRect, new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(1f, 0.5f), new Vector2(220f, 40f), new Vector2(-18f, 0f));
+            SetRect(statusRect, new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(1f, 0.5f), new Vector2(280f, 40f), new Vector2(-18f, 0f));
 
             GameObject icon = CreateImage("JokerIcon", bar.transform, joker, Color.white);
             RectTransform iconRect = icon.GetComponent<RectTransform>();
-            SetRect(iconRect, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(28f, 28f), new Vector2(-250f, 0f));
+            SetRect(iconRect, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(28f, 28f), new Vector2(-310f, 0f));
         }
 
         private static GameObject CreateTableArea(Transform parent, Font font)
@@ -358,6 +500,32 @@ namespace Doudizhu.UI
             }
         }
 
+        private Button CreateMenuButton(
+            Transform parent,
+            string name,
+            string label,
+            Vector2 anchoredPosition,
+            Color color,
+            float width = 300f,
+            float height = 54f,
+            int fontSize = 22)
+        {
+            GameObject buttonObj = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+            buttonObj.transform.SetParent(parent, false);
+
+            RectTransform rect = buttonObj.GetComponent<RectTransform>();
+            SetRect(rect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(width, height), anchoredPosition);
+
+            Image image = buttonObj.GetComponent<Image>();
+            image.color = color;
+
+            Text text = CreateText("Label", buttonObj.transform, label, _font, fontSize, TextAnchor.MiddleCenter, Color.white);
+            RectTransform textRect = text.GetComponent<RectTransform>();
+            SetRect(textRect, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+
+            return buttonObj.GetComponent<Button>();
+        }
+
         private static GameObject CreatePanel(string name, Transform parent, Color color)
         {
             GameObject panel = new GameObject(name, typeof(RectTransform), typeof(Image));
@@ -441,6 +609,18 @@ namespace Doudizhu.UI
 
             new GameObject("AudioManager", typeof(DoudizhuAudioManager));
         }
+
+        private sealed class TableInfo
+        {
+            public TableInfo(int tableId, params string[] players)
+            {
+                TableId = tableId;
+                Players = new List<string>(players);
+            }
+
+            public int TableId { get; }
+
+            public List<string> Players { get; }
+        }
     }
 }
-

@@ -41,7 +41,8 @@ namespace Doudizhu.Game
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Bootstrap()
         {
-            if (Object.FindAnyObjectByType<DoudizhuUiController>() != null)
+            if (Object.FindAnyObjectByType<DoudizhuUiController>() != null ||
+                Object.FindAnyObjectByType<DoudizhuRuntimeUiBuilder>() != null)
             {
                 return;
             }
