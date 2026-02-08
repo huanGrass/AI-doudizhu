@@ -414,6 +414,16 @@ public sealed class TableRoomService
                 room.CallCount++;
             }
 
+            if (room.CallPlayer >= 0)
+            {
+                room.BidStage = TableBidStage.Rob;
+                room.BidsTaken = 0;
+                room.RobCount = 0;
+                room.BidSlots = [new BidSlot(false, false), new BidSlot(false, false), new BidSlot(false, false)];
+                room.CurrentBidderIndex = (room.CallPlayer + 1) % MaxPlayersPerTable;
+                return;
+            }
+
             if (room.BidsTaken >= MaxPlayersPerTable)
             {
                 if (room.CallPlayer < 0)
@@ -430,18 +440,8 @@ public sealed class TableRoomService
                     return;
                 }
 
-                if (room.CallCount == 1)
-                {
-                    room.LandlordIndex = room.CallPlayer;
-                    EnterPlaying(room);
-                    return;
-                }
-
-                room.BidStage = TableBidStage.Rob;
-                room.BidsTaken = 0;
-                room.RobCount = 0;
-                room.BidSlots = [new BidSlot(false, false), new BidSlot(false, false), new BidSlot(false, false)];
-                room.CurrentBidderIndex = (room.CallPlayer + 1) % MaxPlayersPerTable;
+                room.LandlordIndex = 0;
+                EnterPlaying(room);
                 return;
             }
 
@@ -455,7 +455,7 @@ public sealed class TableRoomService
             room.RobCount++;
         }
 
-        if (room.BidsTaken >= 2)
+        if (room.BidsTaken >= MaxPlayersPerTable)
         {
             EnterPlaying(room);
             return;
