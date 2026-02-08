@@ -1,0 +1,33 @@
+﻿#!/bin/sh
+# 客户端改动后自动同步镜像并打调试包
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+if [ -z "$REPO_ROOT" ]; then
+  exit 0
+fi
+
+CHANGED_FILES="$(git diff-tree --no-commit-id --name-only -r HEAD)"
+if [ -z "$CHANGED_FILES" ]; then
+  exit 0
+fi
+
+echo "$CHANGED_FILES" | grep -E '^(Assets/|ProjectSettings/)' >/dev/null 2>&1
+if [ $? -ne 0 ]; then
+  exit 0
+fi
+
+echo "[hook] 检测到客户端改动，执行镜像同步与调试打包..."
+powershell -NoProfile -ExecutionPolicy Bypass -File "$REPO_ROOT/ci/sync_mirror.ps1"
+if [ $? -ne 0 ]; then
+  echo "[hook] sync_mirror 失败"
+  exit 1
+fi
+
+powershell -NoProfile -ExecutionPolicy Bypass -File "$REPO_ROOT/ci/build_windows_debug.ps1" -ProjectDir "$REPO_ROOT"
+if [ $? -ne 0 ]; then
+  echo "[hook] build_windows_debug 失败"
+  exit 1
+fi
+
+echo "[hook] 客户端自动打包完成"
+exit 0

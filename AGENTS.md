@@ -9,3 +9,8 @@
 - 若未完成 git commit，不得继续进行下一步修改或分析。
 - 每次提交完成后，必须运行 `ci/sync_mirror.ps1`；镜像目录为当前工程目录名 + `_mirror`。
 - 若镜像目录未同步，本次提交视为无效。
+- 必须安装并启用 Git Hooks：执行 `ci/install_git_hooks.ps1`，确保 `core.hooksPath=.githooks`。
+- 当提交包含客户端改动（`Assets/` 或 `ProjectSettings/`）时，`post-commit` 必须自动执行：
+  1) `ci/sync_mirror.ps1`
+  2) `ci/build_windows_debug.ps1`
+- 若客户端自动调试打包失败，本次提交视为未完成，必须修复后重新提交。
