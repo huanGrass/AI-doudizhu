@@ -1072,7 +1072,14 @@ namespace Doudizhu.UI
                 TableStateDto state = JsonUtility.FromJson<TableStateDto>(request.downloadHandler.text);
                 if (state != null)
                 {
-                    ApplyState(state);
+                    if (IsExpectedPlayAck(state, sendPass, selected))
+                    {
+                        ApplyState(state);
+                    }
+                    else
+                    {
+                        SetText("TopBar/Status", "联机房间 | 出牌已发送，等待最新同步");
+                    }
                 }
             }
 
@@ -1086,6 +1093,8 @@ namespace Doudizhu.UI
             }
 
             _playRequesting = false;
+
+            yield return FetchAndApplyState();
         }
 
         private IEnumerator SendRestart()
@@ -1251,6 +1260,68 @@ namespace Doudizhu.UI
             }
 
             return string.IsNullOrWhiteSpace(request.error) ? $"HTTP {request.responseCode}" : request.error;
+        }
+
+        private bool IsExpectedPlayAck(TableStateDto state, bool pass, string[] selectedCodes)
+        {
+            if (state == null)
+            {
+                return false;
+            }
+
+            string localName = OnlineRoomSession.LocalPlayerName;
+            if (!string.Equals(state.lastActionPlayer, localName, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            if (pass)
+            {
+                return state.lastActionWasPass;
+            }
+
+            if (state.lastActionWasPass)
+            {
+                return false;
+            }
+
+            return CardCodeSetEquals(state.lastPlayCards, selectedCodes);
+        }
+
+        private static bool CardCodeSetEquals(string[] a, string[] b)
+        {
+            if (a == null || b == null || a.Length != b.Length)
+            {
+                return false;
+            }
+
+            Dictionary<string, int> counter = new(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < a.Length; i++)
+            {
+                string key = a[i] ?? string.Empty;
+                counter[key] = counter.TryGetValue(key, out int c) ? c + 1 : 1;
+            }
+
+            for (int i = 0; i < b.Length; i++)
+            {
+                string key = b[i] ?? string.Empty;
+                if (!counter.TryGetValue(key, out int c) || c <= 0)
+                {
+                    return false;
+                }
+
+                counter[key] = c - 1;
+            }
+
+            foreach (KeyValuePair<string, int> pair in counter)
+            {
+                if (pair.Value != 0)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private static string SerializeCard(Card card)
