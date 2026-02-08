@@ -49,6 +49,7 @@ namespace Doudizhu.UI
         private readonly Dictionary<int, List<Card>> _lastPlays = new();
         private readonly Dictionary<int, Text> _passLabels = new();
         private readonly Dictionary<int, Text> _bidLabels = new();
+        private readonly Dictionary<string, int> _seatIndexByPlayer = new(StringComparer.Ordinal);
 
         private int _lastBidHistoryCount;
         private string _lastActionKey = string.Empty;
@@ -286,6 +287,7 @@ namespace Doudizhu.UI
             bool[] connectedStates = state.connectedStates ?? Array.Empty<bool>();
             int[] handCounts = state.handCounts ?? Array.Empty<int>();
             OnlineRoomSession.ReplacePlayers(players);
+            RebuildSeatMap(players);
 
             RefreshSeats(players, readyStates, connectedStates, handCounts);
             UpdateHandCards(state.myHand ?? Array.Empty<string>());
@@ -391,11 +393,6 @@ namespace Doudizhu.UI
                     _hintButton.interactable = myTurn;
                 }
 
-                if (myTurn && !HasPlayableResponse())
-                {
-                    SetText("TableArea/CenterTip", "没有牌能打过上家");
-                }
-
                 return;
             }
 
@@ -446,7 +443,7 @@ namespace Doudizhu.UI
             for (int i = _lastBidHistoryCount; i < history.Length; i++)
             {
                 BidActionDto bid = history[i];
-                int idx = bid.playerIndex >= 0 ? bid.playerIndex : FindPlayerIndex(players, bid.playerName);
+                int idx = ResolveSeatIndex(players, bid.playerName, bid.playerIndex);
                 if (idx < 0)
                 {
                     continue;
@@ -497,7 +494,7 @@ namespace Doudizhu.UI
                 return;
             }
 
-            int idx = FindPlayerIndex(players, state.lastActionPlayer);
+            int idx = ResolveSeatIndex(players, state.lastActionPlayer, -1);
             if (idx < 0)
             {
                 return;
@@ -538,19 +535,20 @@ namespace Doudizhu.UI
                 return;
             }
 
-            PlayAction? lastPlay = null;
-            foreach (List<Card> cards in _lastPlays.Values)
-            {
-                if (cards != null && cards.Count > 0)
-                {
-                    lastPlay = PlayAction.FromCards(new List<Card>(cards));
-                }
-            }
+            PlayAction? lastPlay = GetCurrentLastPlay();
 
             PlayAction hint = PlayRules.FindAutoPlay(new List<Card>(_currentHandCards), lastPlay);
             if (hint.Type == PlayType.Pass || hint.Cards.Count == 0)
             {
-                SetText("TableArea/CenterTip", "没有牌能打过上家");
+                if (lastPlay.HasValue && lastPlay.Value.Type != PlayType.Pass && !_playRequesting)
+                {
+                    StartCoroutine(SendPlay(true));
+                }
+                else
+                {
+                    SetText("TableArea/CenterTip", "没有牌能打过上家");
+                }
+
                 return;
             }
 
@@ -1440,6 +1438,71 @@ namespace Doudizhu.UI
 
             SetPanel("PlayerPanel_Left", leftName, others.Count > 0, ResolveReadyForPlayer(players, readyStates, leftName), ResolveConnectedForPlayer(players, connectedStates, leftName), ResolveHandCountForPlayer(players, handCounts, leftName));
             SetPanel("PlayerPanel_Right", rightName, others.Count > 1, ResolveReadyForPlayer(players, readyStates, rightName), ResolveConnectedForPlayer(players, connectedStates, rightName), ResolveHandCountForPlayer(players, handCounts, rightName));
+        }
+
+        private void RebuildSeatMap(string[] players)
+        {
+            _seatIndexByPlayer.Clear();
+
+            string localName = OnlineRoomSession.LocalPlayerName;
+            bool localInPlayers = !string.IsNullOrWhiteSpace(localName) && FindPlayerIndex(players, localName) >= 0;
+            if (localInPlayers)
+            {
+                _seatIndexByPlayer[localName] = 0;
+
+                int seat = 1;
+                for (int i = 0; i < players.Length && seat <= 2; i++)
+                {
+                    string player = players[i];
+                    if (string.IsNullOrWhiteSpace(player) || string.Equals(player, localName, StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    if (!_seatIndexByPlayer.ContainsKey(player))
+                    {
+                        _seatIndexByPlayer[player] = seat;
+                        seat++;
+                    }
+                }
+
+                return;
+            }
+
+            for (int i = 0; i < players.Length && i <= 2; i++)
+            {
+                string player = players[i];
+                if (string.IsNullOrWhiteSpace(player) || _seatIndexByPlayer.ContainsKey(player))
+                {
+                    continue;
+                }
+
+                _seatIndexByPlayer[player] = i;
+            }
+        }
+
+        private int ResolveSeatIndex(string[] players, string playerName, int fallbackServerIndex)
+        {
+            if (!string.IsNullOrWhiteSpace(playerName) && _seatIndexByPlayer.TryGetValue(playerName, out int mapped))
+            {
+                return mapped;
+            }
+
+            if (fallbackServerIndex >= 0 && fallbackServerIndex < players.Length)
+            {
+                string fallbackPlayer = players[fallbackServerIndex];
+                if (!string.IsNullOrWhiteSpace(fallbackPlayer) && _seatIndexByPlayer.TryGetValue(fallbackPlayer, out mapped))
+                {
+                    return mapped;
+                }
+            }
+
+            if (fallbackServerIndex is >= 0 and <= 2)
+            {
+                return fallbackServerIndex;
+            }
+
+            return -1;
         }
 
         private void SetPanel(string panelPath, string playerName, bool occupied, bool ready, bool connected, int handCount)
