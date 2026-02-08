@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Text;
+using System.Reflection;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.UI;
@@ -15,6 +16,9 @@ namespace Doudizhu.UI
         private bool _onlineButtonHooked;
         private bool _isRefreshing;
         private bool _lobbySeen;
+
+        private DoudizhuRuntimeUiBuilder _builder;
+        private MethodInfo _startGameMethod;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Bootstrap()
@@ -31,8 +35,22 @@ namespace Doudizhu.UI
 
         private void Update()
         {
+            EnsureBuilderRefs();
             TryHookOnlineButton();
             AutoRefreshWhenLobbyVisible();
+        }
+
+        private void EnsureBuilderRefs()
+        {
+            if (_builder == null)
+            {
+                _builder = FindAnyObjectByType<DoudizhuRuntimeUiBuilder>();
+            }
+
+            if (_startGameMethod == null)
+            {
+                _startGameMethod = typeof(DoudizhuRuntimeUiBuilder).GetMethod("StartGame", BindingFlags.Instance | BindingFlags.NonPublic);
+            }
         }
 
         private void TryHookOnlineButton()
@@ -150,19 +168,19 @@ namespace Doudizhu.UI
 
             joinButton.onClick.RemoveAllListeners();
             int capturedTableId = table.tableId;
-            joinButton.onClick.AddListener(() => StartCoroutine(JoinTableOnly(capturedTableId)));
+            joinButton.onClick.AddListener(() => StartCoroutine(JoinTableAndEnterRoom(capturedTableId)));
             joinButton.interactable = table.playerCount < capacity || ContainsPlayer(table, LocalPlayerName);
         }
 
-        private IEnumerator JoinTableOnly(int tableId)
+        private IEnumerator JoinTableAndEnterRoom(int tableId)
         {
             SetTopStatus($"联机模式 | 正在加入桌子 {tableId}...");
-            Debug.Log($"[OnlineLobbyBridge] Join table request: {tableId}");
 
             string url = $"{ServerBaseUrl}/api/tables/{tableId}/join";
             JoinTableRequestDto req = new JoinTableRequestDto { playerName = LocalPlayerName };
             byte[] payload = Encoding.UTF8.GetBytes(JsonUtility.ToJson(req));
 
+            TableInfoDto joinedTable = null;
             using (UnityWebRequest request = new UnityWebRequest(url, UnityWebRequest.kHttpVerbPOST))
             {
                 request.uploadHandler = new UploadHandlerRaw(payload);
@@ -175,15 +193,37 @@ namespace Doudizhu.UI
                 {
                     string err = string.IsNullOrEmpty(request.error) ? $"HTTP {request.responseCode}" : request.error;
                     SetTopStatus($"联机模式 | 入桌失败: {err}");
-                    Debug.LogWarning($"[OnlineLobbyBridge] Join failed. table={tableId}, err={err}, code={request.responseCode}");
                     yield break;
                 }
+
+                joinedTable = JsonUtility.FromJson<TableInfoDto>(request.downloadHandler.text);
             }
 
-            SetTopStatus($"联机模式 | 已加入桌子 {tableId}（不进入单机）");
-            if (!_isRefreshing)
+            if (_builder == null || _startGameMethod == null)
             {
-                StartCoroutine(RefreshTablesAndPatchJoinButtons());
+                SetTopStatus("联机模式 | 入桌成功，但界面启动失败");
+                yield break;
+            }
+
+            string[] players = joinedTable != null && joinedTable.players != null
+                ? joinedTable.players
+                : Array.Empty<string>();
+            OnlineRoomSession.Set(tableId, LocalPlayerName, players);
+
+            GameObject oldRoot = GameObject.Find("UIRoot");
+            if (oldRoot == null)
+            {
+                SetTopStatus("联机模式 | 入桌成功，但大厅节点丢失");
+                yield break;
+            }
+
+            _startGameMethod.Invoke(_builder, new object[] { oldRoot, $"联机房间 | 桌子 {tableId}" });
+            yield return null;
+
+            GameObject newRoot = GameObject.Find("UIRoot");
+            if (newRoot != null && newRoot.GetComponent<OnlineRoomStageController>() == null)
+            {
+                newRoot.AddComponent<OnlineRoomStageController>();
             }
         }
 
@@ -266,6 +306,34 @@ namespace Doudizhu.UI
         private sealed class JoinTableRequestDto
         {
             public string playerName;
+        }
+    }
+
+    public static class OnlineRoomSession
+    {
+        public static int TableId { get; private set; }
+        public static string LocalPlayerName { get; private set; }
+        public static IReadOnlyList<string> Players => _players;
+
+        private static readonly List<string> _players = new List<string>();
+
+        public static void Set(int tableId, string localPlayerName, IEnumerable<string> players)
+        {
+            TableId = tableId;
+            LocalPlayerName = localPlayerName ?? string.Empty;
+            _players.Clear();
+            if (players == null)
+            {
+                return;
+            }
+
+            foreach (string p in players)
+            {
+                if (!string.IsNullOrWhiteSpace(p))
+                {
+                    _players.Add(p);
+                }
+            }
         }
     }
 }
