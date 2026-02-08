@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Reflection;
 using System.Text;
 using UnityEngine;
@@ -12,8 +13,6 @@ namespace Doudizhu.UI
     public sealed class OnlineLobbyBridge : MonoBehaviour
     {
         public const string ServerBaseUrl = "http://127.0.0.1:5014";
-
-        private const string PlayerNameKey = "online_player_name";
 
         private static string _localPlayerName;
 
@@ -48,17 +47,18 @@ namespace Doudizhu.UI
                 return;
             }
 
-            string stored = PlayerPrefs.GetString(PlayerNameKey, string.Empty);
-            if (!string.IsNullOrWhiteSpace(stored))
+            int pid;
+            try
             {
-                _localPlayerName = stored;
-                return;
+                pid = Process.GetCurrentProcess().Id;
+            }
+            catch
+            {
+                pid = 0;
             }
 
-            string generated = $"玩家{Guid.NewGuid().ToString("N")[..4]}";
-            _localPlayerName = generated;
-            PlayerPrefs.SetString(PlayerNameKey, generated);
-            PlayerPrefs.Save();
+            string suffix = Guid.NewGuid().ToString("N")[..4];
+            _localPlayerName = pid > 0 ? $"玩家{pid % 10000:D4}{suffix}" : $"玩家{suffix}";
         }
 
         private void Update()

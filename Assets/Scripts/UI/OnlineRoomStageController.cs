@@ -65,7 +65,7 @@ namespace Doudizhu.UI
             SetNodeActive("TableArea/ActionBar", false);
             SetNodeActive("TableArea/RestartButton", false);
             SetNodeActive("BottomCards", false);
-            SetNodeActive("HandArea", true);
+            SetNodeActive("HandArea", false);
             SetNodeActive("TableArea/BidBar", false);
 
             SetText("HandArea/HandLabel", "你的手牌");
@@ -287,6 +287,7 @@ namespace Doudizhu.UI
                 SetNodeActive("TableArea/BidBar", false);
                 SetNodeActive("TableArea/ActionBar", false);
                 SetNodeActive("TableArea/RestartButton", false);
+                SetNodeActive("HandArea", false);
 
                 if (localInTable && !localReady && !_readyRequesting)
                 {
@@ -306,6 +307,7 @@ namespace Doudizhu.UI
                 SetNodeActive("TableArea/BidBar", myTurn);
                 SetNodeActive("TableArea/ActionBar", false);
                 SetNodeActive("TableArea/RestartButton", false);
+                SetNodeActive("HandArea", false);
                 return;
             }
 
@@ -322,6 +324,7 @@ namespace Doudizhu.UI
                 SetNodeActive("TableArea/BidBar", false);
                 SetNodeActive("TableArea/ActionBar", myTurn);
                 SetNodeActive("TableArea/RestartButton", false);
+                SetNodeActive("HandArea", true);
 
                 if (!myTurn)
                 {
@@ -348,6 +351,7 @@ namespace Doudizhu.UI
             SetNodeActive("TableArea/BidBar", false);
             SetNodeActive("TableArea/ActionBar", false);
             SetNodeActive("TableArea/RestartButton", true);
+            SetNodeActive("HandArea", true);
             if (_restartButton != null && localInTable)
             {
                 bool[] votes = state.restartVotes ?? Array.Empty<bool>();
@@ -611,6 +615,11 @@ namespace Doudizhu.UI
                 if (request.result == UnityWebRequest.Result.Success)
                 {
                     SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+                }
+                else
+                {
+                    string err = string.IsNullOrWhiteSpace(request.error) ? $"HTTP {request.responseCode}" : request.error;
+                    SetText("TopBar/Status", $"联机房间 | 离开失败: {err}");
                 }
             }
 
