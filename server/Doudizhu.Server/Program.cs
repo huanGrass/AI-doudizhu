@@ -43,9 +43,9 @@ app.MapPost("/api/tables/{tableId:int}/join", (int tableId, JoinTableRequest req
     return Results.Ok(result.Table);
 });
 
-app.MapGet("/api/tables/{tableId:int}/state", (int tableId, TableRoomService service) =>
+app.MapGet("/api/tables/{tableId:int}/state", (int tableId, string? playerName, TableRoomService service) =>
 {
-    TableStateResult result = service.GetTableState(tableId);
+    TableStateResult result = service.GetTableState(tableId, playerName);
     if (!result.Exists || result.State == null)
     {
         return Results.NotFound(new ErrorResponse("table not found."));
@@ -101,6 +101,32 @@ app.MapPost("/api/tables/{tableId:int}/bid", (int tableId, BidRequest request, T
     if (!result.Success || result.State == null)
     {
         return Results.Conflict(new ErrorResponse(result.Error ?? "bid failed."));
+    }
+
+    return Results.Ok(result.State);
+});
+
+app.MapPost("/api/tables/{tableId:int}/play", (int tableId, PlayRequest request, TableRoomService service) =>
+{
+    if (request == null || string.IsNullOrWhiteSpace(request.PlayerName))
+    {
+        return Results.BadRequest(new ErrorResponse("playerName is required."));
+    }
+
+    PlayResult result = service.SubmitPlay(tableId, request.PlayerName.Trim(), request.Pass);
+    if (!result.Exists)
+    {
+        return Results.NotFound(new ErrorResponse("table not found."));
+    }
+
+    if (!result.PlayerInTable)
+    {
+        return Results.Conflict(new ErrorResponse(result.Error ?? "player not in table."));
+    }
+
+    if (!result.Success || result.State == null)
+    {
+        return Results.Conflict(new ErrorResponse(result.Error ?? "play failed."));
     }
 
     return Results.Ok(result.State);
