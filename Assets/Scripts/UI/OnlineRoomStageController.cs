@@ -1078,6 +1078,7 @@ namespace Doudizhu.UI
                     }
                     else
                     {
+                        ApplyLocalPlayDelta(sendPass, selected);
                         SetText("TopBar/Status", "联机房间 | 出牌已发送，等待最新同步");
                     }
                 }
@@ -1286,6 +1287,28 @@ namespace Doudizhu.UI
             }
 
             return CardCodeSetEquals(state.lastPlayCards, selectedCodes);
+        }
+
+        private void ApplyLocalPlayDelta(bool pass, string[] selectedCodes)
+        {
+            if (pass || selectedCodes == null || selectedCodes.Length == 0)
+            {
+                return;
+            }
+
+            List<Card> played = ParseCards(selectedCodes);
+            if (played.Count == 0)
+            {
+                return;
+            }
+
+            for (int i = 0; i < played.Count; i++)
+            {
+                _currentHandCards.Remove(played[i]);
+            }
+
+            _selectedIndices.Clear();
+            RefreshHandVisual();
         }
 
         private static bool CardCodeSetEquals(string[] a, string[] b)

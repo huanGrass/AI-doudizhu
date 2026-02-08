@@ -539,16 +539,15 @@ public sealed class TableRoomService
         DealCards(room);
 
         room.Phase = TablePhase.Bidding;
-        room.BidStage = TableBidStage.Rob;
+        room.BidStage = TableBidStage.Call;
         room.BidSlots = [new BidSlot(false, false), new BidSlot(false, false), new BidSlot(false, false)];
         room.BidsTaken = 0;
-        room.CallPlayer = _rng.Next(0, MaxPlayersPerTable);
-        room.LandlordIndex = room.CallPlayer;
-        room.CallCount = 1;
+        room.CallPlayer = -1;
+        room.LandlordIndex = -1;
+        room.CallCount = 0;
         room.RobCount = 0;
         room.BidHistory.Clear();
-        room.BidHistory.Add(new BidAction(room.CallPlayer, room.Players[room.CallPlayer].Name, true, TableBidStage.Call));
-        room.CurrentBidderIndex = (room.CallPlayer + 1) % MaxPlayersPerTable;
+        room.CurrentBidderIndex = _rng.Next(0, MaxPlayersPerTable);
         room.CurrentTurnIndex = -1;
         room.WinnerIndex = -1;
         room.LastPlayCards.Clear();
