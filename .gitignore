@@ -1,4 +1,28 @@
-Library/
-Logs/
-UserSettings/
-给AI看的资源/
+# Unity
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Uu]serSettings/
+/[Mm]emoryCaptures/
+/[Ll]ogs/
+/给AI看的资源/
+
+# Visual Studio / Rider / VSCode
+*.csproj
+*.sln
+*.user
+*.pidb
+*.booproj
+*.svd
+*.unityproj
+*.tmp
+*.userprefs
+*.vs/
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
