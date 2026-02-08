@@ -7,9 +7,9 @@ public sealed class TableRoomService
     private readonly object _gate = new();
     private readonly List<TableRoom> _tables =
     [
-        new TableRoom(1, ["阿凯", "丸子"]),
-        new TableRoom(2, ["小雨"]),
-        new TableRoom(3, ["老K", "柚子", "羽飞"]),
+        new TableRoom(1, []),
+        new TableRoom(2, []),
+        new TableRoom(3, []),
         new TableRoom(4, [])
     ];
 
@@ -72,3 +72,4 @@ public sealed record TableListResponse(IReadOnlyList<TableDto> Tables);
 public sealed record JoinTableRequest(string PlayerName);
 
 public sealed record JoinTableResult(bool Exists, bool Success, TableDto? Table);
+

@@ -1,7 +1,6 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Reflection;
 using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -16,8 +15,6 @@ namespace Doudizhu.UI
 
         private readonly HashSet<int> _patchedTableIds = new HashSet<int>();
 
-        private DoudizhuRuntimeUiBuilder _builder;
-        private MethodInfo _startGameMethod;
         private bool _onlineButtonHooked;
         private bool _isRefreshing;
         private bool _lobbySeen;
@@ -37,27 +34,13 @@ namespace Doudizhu.UI
 
         private void Update()
         {
-            EnsureBuilderRefs();
             TryHookOnlineButton();
             AutoRefreshWhenLobbyVisible();
         }
 
-        private void EnsureBuilderRefs()
-        {
-            if (_builder == null)
-            {
-                _builder = FindAnyObjectByType<DoudizhuRuntimeUiBuilder>();
-            }
-
-            if (_startGameMethod == null)
-            {
-                _startGameMethod = typeof(DoudizhuRuntimeUiBuilder).GetMethod("StartGame", BindingFlags.Instance | BindingFlags.NonPublic);
-            }
-        }
-
         private void TryHookOnlineButton()
         {
-            if (_onlineButtonHooked || _builder == null || _startGameMethod == null)
+            if (_onlineButtonHooked)
             {
                 return;
             }
@@ -92,12 +75,14 @@ namespace Doudizhu.UI
             if (!_lobbySeen && !_isRefreshing)
             {
                 _lobbySeen = true;
+                SetLobbyToEmptyState();
                 StartCoroutine(RefreshTablesAndPatchJoinButtons());
             }
         }
 
         private void OnOnlineClicked()
         {
+            SetLobbyToEmptyState();
             if (!_isRefreshing)
             {
                 StartCoroutine(RefreshTablesAndPatchJoinButtons());
@@ -114,6 +99,7 @@ namespace Doudizhu.UI
                 yield return request.SendWebRequest();
                 if (request.result != UnityWebRequest.Result.Success)
                 {
+                    SetTopStatus("联机模式  |  服务端不可用");
                     _isRefreshing = false;
                     yield break;
                 }
@@ -121,10 +107,12 @@ namespace Doudizhu.UI
                 TableListResponseDto response = JsonUtility.FromJson<TableListResponseDto>(request.downloadHandler.text);
                 if (response == null || response.tables == null)
                 {
+                    SetTopStatus("联机模式  |  服务端数据无效");
                     _isRefreshing = false;
                     yield break;
                 }
 
+                SetTopStatus("联机模式  |  已连接服务端");
                 for (int i = 0; i < response.tables.Length; i++)
                 {
                     PatchTableUi(response.tables[i]);
@@ -168,7 +156,7 @@ namespace Doudizhu.UI
             {
                 joinButton.onClick.RemoveAllListeners();
                 int capturedTableId = table.tableId;
-                joinButton.onClick.AddListener(() => StartCoroutine(JoinAndEnter(capturedTableId)));
+                joinButton.onClick.AddListener(() => StartCoroutine(JoinTableOnly(capturedTableId)));
                 _patchedTableIds.Add(table.tableId);
             }
 
@@ -176,13 +164,8 @@ namespace Doudizhu.UI
             joinButton.interactable = mySeat || table.playerCount < capacity;
         }
 
-        private IEnumerator JoinAndEnter(int tableId)
+        private IEnumerator JoinTableOnly(int tableId)
         {
-            if (_builder == null || _startGameMethod == null)
-            {
-                yield break;
-            }
-
             string url = $"{ServerBaseUrl}/api/tables/{tableId}/join";
             JoinTableRequestDto req = new JoinTableRequestDto { playerName = LocalPlayerName };
             byte[] payload = Encoding.UTF8.GetBytes(JsonUtility.ToJson(req));
@@ -197,17 +180,58 @@ namespace Doudizhu.UI
                 yield return request.SendWebRequest();
                 if (request.result != UnityWebRequest.Result.Success)
                 {
+                    SetTopStatus("联机模式  |  入桌失败");
                     yield break;
                 }
             }
 
-            GameObject root = GameObject.Find("UIRoot");
-            if (root == null)
+            SetTopStatus($"联机模式  |  已加入桌子 {tableId}");
+            if (!_isRefreshing)
             {
-                yield break;
+                StartCoroutine(RefreshTablesAndPatchJoinButtons());
+            }
+        }
+
+        private void SetLobbyToEmptyState()
+        {
+            for (int i = 1; i <= 8; i++)
+            {
+                GameObject tableObj = GameObject.Find($"UIRoot/LobbyPanel/Table_{i}");
+                if (tableObj == null)
+                {
+                    continue;
+                }
+
+                Text players = tableObj.transform.Find("Players")?.GetComponent<Text>();
+                Text seat = tableObj.transform.Find("SeatText")?.GetComponent<Text>();
+                Button joinButton = tableObj.transform.Find("JoinButton")?.GetComponent<Button>();
+                if (players != null)
+                {
+                    players.text = "玩家: 暂无玩家";
+                }
+
+                if (seat != null)
+                {
+                    seat.text = "人数: 0/3";
+                }
+
+                if (joinButton != null)
+                {
+                    joinButton.onClick.RemoveAllListeners();
+                    joinButton.interactable = false;
+                }
             }
 
-            _startGameMethod.Invoke(_builder, new object[] { root, $"联机模式  |  桌子 {tableId}" });
+            SetTopStatus("联机模式  |  正在连接服务端");
+        }
+
+        private static void SetTopStatus(string text)
+        {
+            Text status = GameObject.Find("UIRoot/TopBar/Status")?.GetComponent<Text>();
+            if (status != null)
+            {
+                status.text = text;
+            }
         }
 
         private static bool ContainsPlayer(TableInfoDto table, string playerName)
