@@ -1,17 +1,23 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Networking;
 using UnityEngine.UI;
 
 namespace Doudizhu.UI
 {
     public sealed class OnlineRoomStageController : MonoBehaviour
     {
+        private const string ServerBaseUrl = "http://127.0.0.1:5014";
+        private const float RefreshInterval = 1f;
+
         private void Start()
         {
-            ApplyRoomStage();
+            ApplyStaticRoomStage();
+            StartCoroutine(PollPlayers());
         }
 
-        private void ApplyRoomStage()
+        private void ApplyStaticRoomStage()
         {
             DoudizhuUiController gameController = GetComponent<DoudizhuUiController>();
             if (gameController != null)
@@ -29,6 +35,43 @@ namespace Doudizhu.UI
             SetNodeActive("BottomCards", false);
             SetNodeActive("HandArea", false);
 
+            RefreshSeats();
+        }
+
+        private IEnumerator PollPlayers()
+        {
+            while (true)
+            {
+                string url = $"{ServerBaseUrl}/api/tables";
+                using (UnityWebRequest request = UnityWebRequest.Get(url))
+                {
+                    request.timeout = 4;
+                    yield return request.SendWebRequest();
+                    if (request.result == UnityWebRequest.Result.Success)
+                    {
+                        TableListResponseDto response = JsonUtility.FromJson<TableListResponseDto>(request.downloadHandler.text);
+                        if (response != null && response.tables != null)
+                        {
+                            for (int i = 0; i < response.tables.Length; i++)
+                            {
+                                TableInfoDto table = response.tables[i];
+                                if (table.tableId == OnlineRoomSession.TableId)
+                                {
+                                    OnlineRoomSession.ReplacePlayers(table.players);
+                                    RefreshSeats();
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                yield return new WaitForSeconds(RefreshInterval);
+            }
+        }
+
+        private void RefreshSeats()
+        {
             List<string> players = new List<string>(OnlineRoomSession.Players);
             string localName = string.IsNullOrWhiteSpace(OnlineRoomSession.LocalPlayerName) ? "我" : OnlineRoomSession.LocalPlayerName;
 
@@ -71,6 +114,19 @@ namespace Doudizhu.UI
             {
                 node.gameObject.SetActive(active);
             }
+        }
+
+        [System.Serializable]
+        private sealed class TableListResponseDto
+        {
+            public TableInfoDto[] tables;
+        }
+
+        [System.Serializable]
+        private sealed class TableInfoDto
+        {
+            public int tableId;
+            public string[] players;
         }
     }
 }

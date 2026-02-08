@@ -1,8 +1,8 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Text;
 using System.Reflection;
+using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.UI;
@@ -12,7 +12,7 @@ namespace Doudizhu.UI
     public sealed class OnlineLobbyBridge : MonoBehaviour
     {
         private const string ServerBaseUrl = "http://127.0.0.1:5014";
-        private const string LocalPlayerName = "Madlee";
+        private static readonly string LocalPlayerName = $"玩家{Guid.NewGuid().ToString("N")[..4]}";
 
         private bool _onlineButtonHooked;
         private bool _isRefreshing;
@@ -61,13 +61,7 @@ namespace Doudizhu.UI
                 return;
             }
 
-            GameObject onlineBtnObj = GameObject.Find("UIRoot/ModePanel/OnlineModeButton");
-            if (onlineBtnObj == null)
-            {
-                return;
-            }
-
-            Button onlineButton = onlineBtnObj.GetComponent<Button>();
+            Button onlineButton = GameObject.Find("UIRoot/ModePanel/OnlineModeButton")?.GetComponent<Button>();
             if (onlineButton == null)
             {
                 return;
@@ -127,7 +121,7 @@ namespace Doudizhu.UI
                     yield break;
                 }
 
-                SetTopStatus("联机模式 | 已连接服务端");
+                SetTopStatus($"联机模式 | 已连接服务端（你是 {LocalPlayerName}）");
                 for (int i = 0; i < response.tables.Length; i++)
                 {
                     PatchTableUi(response.tables[i]);
@@ -139,13 +133,12 @@ namespace Doudizhu.UI
 
         private void PatchTableUi(TableInfoDto table)
         {
-            GameObject tableObj = GameObject.Find($"UIRoot/LobbyPanel/Table_{table.tableId}");
-            if (tableObj == null)
+            Transform tableRoot = GameObject.Find($"UIRoot/LobbyPanel/Table_{table.tableId}")?.transform;
+            if (tableRoot == null)
             {
                 return;
             }
 
-            Transform tableRoot = tableObj.transform;
             Text players = tableRoot.Find("Players")?.GetComponent<Text>();
             Text seat = tableRoot.Find("SeatText")?.GetComponent<Text>();
             Button joinButton = tableRoot.Find("JoinButton")?.GetComponent<Button>();
@@ -175,7 +168,7 @@ namespace Doudizhu.UI
 
         private IEnumerator JoinTableAndEnterRoom(int tableId)
         {
-            SetTopStatus($"联机模式 | 正在加入桌子 {tableId}...");
+            SetTopStatus($"联机模式 | {LocalPlayerName} 正在加入桌子 {tableId}...");
 
             string url = $"{ServerBaseUrl}/api/tables/{tableId}/join";
             JoinTableRequestDto req = new JoinTableRequestDto { playerName = LocalPlayerName };
@@ -206,9 +199,7 @@ namespace Doudizhu.UI
                 yield break;
             }
 
-            string[] players = joinedTable != null && joinedTable.players != null
-                ? joinedTable.players
-                : Array.Empty<string>();
+            string[] players = joinedTable != null && joinedTable.players != null ? joinedTable.players : Array.Empty<string>();
             OnlineRoomSession.Set(tableId, LocalPlayerName, players);
 
             GameObject oldRoot = GameObject.Find("UIRoot");
@@ -232,15 +223,15 @@ namespace Doudizhu.UI
         {
             for (int i = 1; i <= 8; i++)
             {
-                GameObject tableObj = GameObject.Find($"UIRoot/LobbyPanel/Table_{i}");
-                if (tableObj == null)
+                Transform tableRoot = GameObject.Find($"UIRoot/LobbyPanel/Table_{i}")?.transform;
+                if (tableRoot == null)
                 {
                     continue;
                 }
 
-                Text players = tableObj.transform.Find("Players")?.GetComponent<Text>();
-                Text seat = tableObj.transform.Find("SeatText")?.GetComponent<Text>();
-                Button joinButton = tableObj.transform.Find("JoinButton")?.GetComponent<Button>();
+                Text players = tableRoot.Find("Players")?.GetComponent<Text>();
+                Text seat = tableRoot.Find("SeatText")?.GetComponent<Text>();
+                Button joinButton = tableRoot.Find("JoinButton")?.GetComponent<Button>();
                 if (players != null)
                 {
                     players.text = "玩家: 暂无玩家";
@@ -258,7 +249,7 @@ namespace Doudizhu.UI
                 }
             }
 
-            SetTopStatus("联机模式 | 正在连接服务端...");
+            SetTopStatus($"联机模式 | 正在连接服务端（你是 {LocalPlayerName}）...");
         }
 
         private static void SetTopStatus(string text)
@@ -322,6 +313,11 @@ namespace Doudizhu.UI
         {
             TableId = tableId;
             LocalPlayerName = localPlayerName ?? string.Empty;
+            ReplacePlayers(players);
+        }
+
+        public static void ReplacePlayers(IEnumerable<string> players)
+        {
             _players.Clear();
             if (players == null)
             {
