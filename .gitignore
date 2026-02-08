@@ -2,6 +2,9 @@
 /[Ll]ibrary/
 /[Tt]emp/
 /[Oo]bj/
+[Bb]in/
+**/[Oo]bj/
+**/[Bb]in/
 /[Bb]uild/
 /[Bb]uilds/
 /[Uu]serSettings/
@@ -22,6 +25,9 @@
 *.vs/
 .idea/
 .vscode/
+
+# Allow backend project files
+!server/**/*.csproj
 
 # OS
 .DS_Store
