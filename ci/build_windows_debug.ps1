@@ -43,8 +43,9 @@ Write-Host "[build] Project: $mirrorDir"
 Write-Host "[build] Log: $LogPath"
 
 & $UnityExe -batchmode -quit -projectPath $mirrorDir -executeMethod BuildWindowsDebug.Build -logFile $LogPath
-if ($LASTEXITCODE -ne 0) {
-    throw "Unity 调试打包失败，退出码: $LASTEXITCODE"
+$exitCode = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
+if ($exitCode -ne 0) {
+    throw "Unity 调试打包失败，退出码: $exitCode"
 }
 
 $outputExe = Join-Path $mirrorDir "Builds\WindowsClient_Debug\Doudizhu_Debug.exe"
