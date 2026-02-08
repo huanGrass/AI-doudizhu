@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.UI;
@@ -93,9 +94,19 @@ namespace Doudizhu.UI
 
             _started = true;
             SetText("TopBar/Status", $"联机房间 | 桌子 {OnlineRoomSession.TableId} | 开始对局");
+            SetNodeActive("ActionBar", true);
+            SetNodeActive("TableArea/ActionBar", true);
+            SetNodeActive("TableArea/BidBar", true);
             SetNodeActive("BottomCards", true);
             SetNodeActive("HandArea", true);
             gameController.enabled = true;
+
+            MethodInfo restartMethod = typeof(DoudizhuUiController).GetMethod("StartNewGame", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (restartMethod != null)
+            {
+                restartMethod.Invoke(gameController, null);
+            }
+
             enabled = false;
         }
 
