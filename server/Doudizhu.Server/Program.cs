@@ -26,21 +26,84 @@ app.MapPost("/api/tables/{tableId:int}/join", (int tableId, JoinTableRequest req
 {
     if (request == null || string.IsNullOrWhiteSpace(request.PlayerName))
     {
-        return Results.BadRequest(new { error = "playerName is required." });
+        return Results.BadRequest(new ErrorResponse("playerName is required."));
     }
 
     JoinTableResult result = service.JoinTable(tableId, request.PlayerName.Trim());
     if (!result.Exists)
     {
-        return Results.NotFound(new { error = "table not found." });
+        return Results.NotFound(new ErrorResponse("table not found."));
     }
 
     if (!result.Success)
     {
-        return Results.Conflict(new { error = "table is full." });
+        return Results.Conflict(new ErrorResponse("table is full."));
     }
 
     return Results.Ok(result.Table);
+});
+
+app.MapGet("/api/tables/{tableId:int}/state", (int tableId, TableRoomService service) =>
+{
+    TableStateResult result = service.GetTableState(tableId);
+    if (!result.Exists || result.State == null)
+    {
+        return Results.NotFound(new ErrorResponse("table not found."));
+    }
+
+    return Results.Ok(result.State);
+});
+
+app.MapPost("/api/tables/{tableId:int}/ready", (int tableId, ReadyRequest request, TableRoomService service) =>
+{
+    if (request == null || string.IsNullOrWhiteSpace(request.PlayerName))
+    {
+        return Results.BadRequest(new ErrorResponse("playerName is required."));
+    }
+
+    ReadyResult result = service.SetReady(tableId, request.PlayerName.Trim(), request.Ready);
+    if (!result.Exists)
+    {
+        return Results.NotFound(new ErrorResponse("table not found."));
+    }
+
+    if (!result.PlayerInTable)
+    {
+        return Results.Conflict(new ErrorResponse("player not in table."));
+    }
+
+    if (!result.Success || result.State == null)
+    {
+        return Results.Conflict(new ErrorResponse("ready update failed."));
+    }
+
+    return Results.Ok(result.State);
+});
+
+app.MapPost("/api/tables/{tableId:int}/bid", (int tableId, BidRequest request, TableRoomService service) =>
+{
+    if (request == null || string.IsNullOrWhiteSpace(request.PlayerName))
+    {
+        return Results.BadRequest(new ErrorResponse("playerName is required."));
+    }
+
+    BidResult result = service.SubmitBid(tableId, request.PlayerName.Trim(), request.CallLandlord);
+    if (!result.Exists)
+    {
+        return Results.NotFound(new ErrorResponse("table not found."));
+    }
+
+    if (!result.PlayerInTable)
+    {
+        return Results.Conflict(new ErrorResponse(result.Error ?? "player not in table."));
+    }
+
+    if (!result.Success || result.State == null)
+    {
+        return Results.Conflict(new ErrorResponse(result.Error ?? "bid failed."));
+    }
+
+    return Results.Ok(result.State);
 });
 
 app.Run();

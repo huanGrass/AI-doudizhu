@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
@@ -11,8 +11,11 @@ namespace Doudizhu.UI
 {
     public sealed class OnlineLobbyBridge : MonoBehaviour
     {
-        private const string ServerBaseUrl = "http://127.0.0.1:5014";
-        private static readonly string LocalPlayerName = $"玩家{Guid.NewGuid().ToString("N")[..4]}";
+        public const string ServerBaseUrl = "http://127.0.0.1:5014";
+
+        private const string PlayerNameKey = "online_player_name";
+
+        private static string _localPlayerName;
 
         private bool _onlineButtonHooked;
         private bool _isRefreshing;
@@ -20,6 +23,8 @@ namespace Doudizhu.UI
 
         private DoudizhuRuntimeUiBuilder _builder;
         private MethodInfo _startGameMethod;
+
+        public static string LocalPlayerName => _localPlayerName;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Bootstrap()
@@ -29,9 +34,31 @@ namespace Doudizhu.UI
                 return;
             }
 
+            EnsureLocalPlayerName();
+
             GameObject obj = new GameObject("OnlineLobbyBridge");
             DontDestroyOnLoad(obj);
             obj.AddComponent<OnlineLobbyBridge>();
+        }
+
+        private static void EnsureLocalPlayerName()
+        {
+            if (!string.IsNullOrWhiteSpace(_localPlayerName))
+            {
+                return;
+            }
+
+            string stored = PlayerPrefs.GetString(PlayerNameKey, string.Empty);
+            if (!string.IsNullOrWhiteSpace(stored))
+            {
+                _localPlayerName = stored;
+                return;
+            }
+
+            string generated = $"玩家{Guid.NewGuid().ToString("N")[..4]}";
+            _localPlayerName = generated;
+            PlayerPrefs.SetString(PlayerNameKey, generated);
+            PlayerPrefs.Save();
         }
 
         private void Update()
@@ -106,6 +133,7 @@ namespace Doudizhu.UI
             {
                 request.timeout = 4;
                 yield return request.SendWebRequest();
+
                 if (request.result != UnityWebRequest.Result.Success)
                 {
                     SetTopStatus("联机模式 | 服务端不可用");
@@ -121,7 +149,7 @@ namespace Doudizhu.UI
                     yield break;
                 }
 
-                SetTopStatus($"联机模式 | 已连接服务端（你是 {LocalPlayerName}）");
+                SetTopStatus($"联机模式 | 已连接服务端（你是 {_localPlayerName}）");
                 for (int i = 0; i < response.tables.Length; i++)
                 {
                     PatchTableUi(response.tables[i]);
@@ -163,15 +191,15 @@ namespace Doudizhu.UI
             joinButton.onClick.RemoveAllListeners();
             int capturedTableId = table.tableId;
             joinButton.onClick.AddListener(() => StartCoroutine(JoinTableAndEnterRoom(capturedTableId)));
-            joinButton.interactable = table.playerCount < capacity || ContainsPlayer(table, LocalPlayerName);
+            joinButton.interactable = table.playerCount < capacity || ContainsPlayer(table, _localPlayerName);
         }
 
         private IEnumerator JoinTableAndEnterRoom(int tableId)
         {
-            SetTopStatus($"联机模式 | {LocalPlayerName} 正在加入桌子 {tableId}...");
+            SetTopStatus($"联机模式 | {_localPlayerName} 正在加入桌子 {tableId}...");
 
             string url = $"{ServerBaseUrl}/api/tables/{tableId}/join";
-            JoinTableRequestDto req = new JoinTableRequestDto { playerName = LocalPlayerName };
+            JoinTableRequestDto req = new JoinTableRequestDto { playerName = _localPlayerName };
             byte[] payload = Encoding.UTF8.GetBytes(JsonUtility.ToJson(req));
 
             TableInfoDto joinedTable = null;
@@ -186,7 +214,7 @@ namespace Doudizhu.UI
                 if (request.result != UnityWebRequest.Result.Success)
                 {
                     string err = string.IsNullOrEmpty(request.error) ? $"HTTP {request.responseCode}" : request.error;
-                    SetTopStatus($"联机模式 | 入桌失败: {err}");
+                    SetTopStatus($"联机模式 | 加入失败: {err}");
                     yield break;
                 }
 
@@ -195,17 +223,17 @@ namespace Doudizhu.UI
 
             if (_builder == null || _startGameMethod == null)
             {
-                SetTopStatus("联机模式 | 入桌成功，但界面启动失败");
+                SetTopStatus("联机模式 | 加入成功，但界面启动失败");
                 yield break;
             }
 
             string[] players = joinedTable != null && joinedTable.players != null ? joinedTable.players : Array.Empty<string>();
-            OnlineRoomSession.Set(tableId, LocalPlayerName, players);
+            OnlineRoomSession.Set(tableId, _localPlayerName, players);
 
             GameObject oldRoot = GameObject.Find("UIRoot");
             if (oldRoot == null)
             {
-                SetTopStatus("联机模式 | 入桌成功，但大厅节点丢失");
+                SetTopStatus("联机模式 | 加入成功，但大厅节点丢失");
                 yield break;
             }
 
@@ -232,6 +260,7 @@ namespace Doudizhu.UI
                 Text players = tableRoot.Find("Players")?.GetComponent<Text>();
                 Text seat = tableRoot.Find("SeatText")?.GetComponent<Text>();
                 Button joinButton = tableRoot.Find("JoinButton")?.GetComponent<Button>();
+
                 if (players != null)
                 {
                     players.text = "玩家: 暂无玩家";
@@ -249,7 +278,7 @@ namespace Doudizhu.UI
                 }
             }
 
-            SetTopStatus($"联机模式 | 正在连接服务端（你是 {LocalPlayerName}）...");
+            SetTopStatus($"联机模式 | 正在连接服务端（你是 {_localPlayerName}）...");
         }
 
         private static void SetTopStatus(string text)
